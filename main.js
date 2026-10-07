@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.07-4';
+  const VERSION = '2026.10.07-5';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -58,7 +58,7 @@
   let resumeMode = 'playing';
   let tr = null; // 過關過場
   let levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
-  const DIFFICULTY = { relaxed: { linesPerLevel: 12, gravityScale: 0.55, reward: 0.6 }, normal: { linesPerLevel: 10, gravityScale: 0.8, reward: 0.7 }, classic: { linesPerLevel: 10, gravityScale: 1, reward: 0.85 } };
+  const DIFFICULTY = { relaxed: { linesPerLevel: 30, gravityScale: 0.55, reward: 0.6 }, normal: { linesPerLevel: 30, gravityScale: 0.8, reward: 0.7 }, classic: { linesPerLevel: 30, gravityScale: 1, reward: 0.85 } };
   let game = null;
   let countdown = 0;
   let lastCount = 4;
