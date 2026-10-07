@@ -2325,9 +2325,502 @@
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); for (const c of this.clouds) c.x += 6 * d.lines * this.sc; }
   }
 
+  // =========================================================
+  // 土星環：巨大環狀行星（前後環遮擋）、衛星、小行星帶、流星
+  // =========================================================
+  class Saturn {
+    constructor(low) { this.low = low; this.flash = 0; this.intensity = 0; this.meteorTimer = 3; }
+    setIntensity(v) { this.intensity = v; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#03040c'], [0.6, '#0a0c1e'], [1, '#141024']]);
+      g.fillRect(0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 6; i++) glow(g, rand(0, w), rand(0, h), rand(0.3, 0.5) * w, ['40,90,140', '140,80,60', '90,60,140'][i % 3], 0.12);
+      for (let i = 0; i < (this.low ? 300 : 700); i++) {
+        g.fillStyle = `rgba(${['230,235,255', '255,230,200', '200,215,255'][(Math.random() * 3) | 0]},${rand(0.15, 0.8)})`;
+        const s = rand(0.5, 1.6); g.fillRect(rand(0, w), rand(0, h), s, s);
+      }
+      g.globalCompositeOperation = 'source-over';
+      // 行星
+      const px = (this.px = w * 0.72), py = (this.py = h * 0.72), pr = (this.pr = Math.min(w, h) * 0.34);
+      const ring = (front) => {
+        g.save(); g.translate(px, py); g.rotate(-0.38); g.scale(1, 0.24);
+        const bands = [[1.25, 1.42, 'rgba(220,190,150,0.55)'], [1.44, 1.62, 'rgba(240,215,175,0.75)'], [1.66, 1.72, 'rgba(180,150,120,0.35)'], [1.74, 1.98, 'rgba(230,200,160,0.6)'], [2.02, 2.12, 'rgba(200,170,140,0.3)']];
+        for (const [r0, r1, c] of bands) {
+          g.strokeStyle = c; g.lineWidth = (r1 - r0) * pr;
+          g.beginPath();
+          if (front) g.arc(0, 0, (r0 + r1) / 2 * pr, 0, Math.PI);
+          else g.arc(0, 0, (r0 + r1) / 2 * pr, Math.PI, TAU);
+          g.stroke();
+        }
+        g.restore();
+      };
+      ring(false);
+      const pg = g.createRadialGradient(px - pr * 0.35, py - pr * 0.4, pr * 0.1, px, py, pr);
+      pg.addColorStop(0, '#f6dcae'); pg.addColorStop(0.5, '#d2a46c'); pg.addColorStop(0.85, '#7a5634'); pg.addColorStop(1, '#2a1a10');
+      g.fillStyle = pg; g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill();
+      g.save(); g.beginPath(); g.arc(px, py, pr, 0, TAU); g.clip();
+      g.translate(px, py); g.rotate(-0.38);
+      for (let i = -8; i <= 8; i++) {
+        g.fillStyle = `rgba(${i % 2 ? '120,80,40' : '255,235,200'},${0.06 + Math.abs(Math.sin(i * 1.7)) * 0.08})`;
+        g.fillRect(-pr * 1.2, i * pr * 0.11, pr * 2.4, pr * 0.07);
+      }
+      g.restore();
+      // 夜面陰影
+      const sh = g.createLinearGradient(px - pr, py - pr, px + pr, py + pr);
+      sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(0.55, 'rgba(0,0,0,0.1)'); sh.addColorStop(1, 'rgba(0,0,10,0.75)');
+      g.fillStyle = sh; g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill();
+      ring(true);
+      glow(g, px, py, pr * 1.4, '255,210,160', 0.08);
+      this.sprites = ['255,240,220', '180,210,255'].map(starSprite);
+      this.bright = [];
+      for (let i = 0; i < (this.low ? 10 : 22); i++) this.bright.push({ x: rand(0, w), y: rand(0, h * 0.6), s: rand(6, 16) * sc, k: i % 2, ph: rand(0, TAU) });
+      this.rocks = [];
+      for (let i = 0; i < (this.low ? 12 : 26); i++) {
+        const pts = []; const n = 7;
+        for (let k = 0; k < n; k++) pts.push([Math.cos(k / n * TAU) * rand(0.6, 1), Math.sin(k / n * TAU) * rand(0.6, 1)]);
+        this.rocks.push({ x: rand(0, w), y: rand(0, h), r: rand(2, 7) * sc, vx: rand(-8, -2) * sc, vy: rand(1, 4) * sc, rot: rand(0, TAU), vr: rand(-1, 1), pts });
+      }
+      this.moons = [{ a: 0.5, r: 2.45, s: 9 * sc, v: 0.12, c: '#cfd6e6' }, { a: 3.2, r: 2.9, s: 6 * sc, v: 0.08, c: '#e8c9a0' }];
+      this.meteors = new Meteors(sc);
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.15, s);
+      for (const r of this.rocks) { r.x += r.vx * s; r.y += r.vy * s; r.rot += r.vr * s; if (r.x < -20) { r.x = this.w + 20; r.y = rand(0, this.h); } if (r.y > this.h + 20) r.y = -20; }
+      for (const m of this.moons) m.a += m.v * s;
+      for (const b of this.bright) b.ph += s * 1.3;
+      this.meteorTimer -= s;
+      if (this.meteorTimer <= 0) { this.meteors.random(this.w, this.h * 0.6, false); this.meteorTimer = rand(3, 7) / (1 + this.intensity * 0.3); }
+      this.meteors.update(s);
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      for (const b of this.bright) { g.globalAlpha = 0.5 + 0.5 * Math.sin(b.ph); g.drawImage(this.sprites[b.k].cv, b.x - b.s, b.y - b.s, b.s * 2, b.s * 2); }
+      g.globalAlpha = 1;
+      glow(g, this.px, this.py, this.pr * 1.6, '255,200,150', 0.06 + beat * 0.08 + this.flash * 0.2);
+      g.globalCompositeOperation = 'source-over';
+      // 衛星：繞到行星後方時隱藏
+      for (const m of this.moons) {
+        const ex = Math.cos(m.a) * this.pr * m.r, ey = Math.sin(m.a) * this.pr * m.r * 0.24;
+        const x = this.px + ex * Math.cos(-0.38) - ey * Math.sin(-0.38), y = this.py + ex * Math.sin(-0.38) + ey * Math.cos(-0.38);
+        if (Math.sin(m.a) < 0 && Math.hypot(x - this.px, y - this.py) < this.pr) continue;
+        const mg = g.createRadialGradient(x - m.s * 0.4, y - m.s * 0.4, 0, x, y, m.s);
+        mg.addColorStop(0, m.c); mg.addColorStop(1, '#202430');
+        g.fillStyle = mg; g.beginPath(); g.arc(x, y, m.s, 0, TAU); g.fill();
+      }
+      g.fillStyle = '#6b5a4c';
+      for (const r of this.rocks) {
+        g.save(); g.translate(r.x, r.y); g.rotate(r.rot);
+        const rg = g.createLinearGradient(-r.r, -r.r, r.r, r.r);
+        rg.addColorStop(0, '#b8a08a'); rg.addColorStop(1, '#2a2420');
+        g.fillStyle = rg;
+        g.beginPath(); r.pts.forEach(([px, py], i) => (i ? g.lineTo(px * r.r, py * r.r) : g.moveTo(px * r.r, py * r.r))); g.closePath(); g.fill();
+        g.restore();
+      }
+      this.meteors.draw(g);
+    }
+    burst(d) {
+      this.flash = Math.min(1.5, this.flash + 0.3 * d.lines);
+      for (let i = 0; i < (d.lines >= 4 ? 3 : d.lines >= 2 ? 1 : 0); i++) this.meteors.random(this.w, this.h * 0.6, true);
+    }
+  }
+
+  // =========================================================
+  // 楓紅：中式庭園白牆、月洞門、灰瓦、楓樹、飄落楓葉、金色斜陽
+  // =========================================================
+  function mapleSprite(c1, c2) {
+    const S = layer(40, 40);
+    const g = S.g;
+    const gr = g.createRadialGradient(20, 24, 2, 20, 20, 20);
+    gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+    g.fillStyle = gr;
+    g.beginPath();
+    const lobes = [[-90, 18], [-150, 15], [-30, 15], [160, 11], [20, 11]];
+    g.moveTo(20, 24);
+    for (const [deg, len] of lobes) {
+      const a = deg * Math.PI / 180;
+      g.lineTo(20 + Math.cos(a - 0.35) * len * 0.5, 22 + Math.sin(a - 0.35) * len * 0.5);
+      g.lineTo(20 + Math.cos(a) * len, 22 + Math.sin(a) * len);
+      g.lineTo(20 + Math.cos(a + 0.35) * len * 0.5, 22 + Math.sin(a + 0.35) * len * 0.5);
+      g.lineTo(20, 24);
+    }
+    g.fill();
+    g.strokeStyle = 'rgba(90,20,10,0.5)'; g.lineWidth = 0.8;
+    for (const [deg, len] of lobes) { const a = deg * Math.PI / 180; g.beginPath(); g.moveTo(20, 24); g.lineTo(20 + Math.cos(a) * len * 0.85, 22 + Math.sin(a) * len * 0.85); g.stroke(); }
+    g.beginPath(); g.moveTo(20, 24); g.lineTo(20, 36); g.stroke();
+    return S;
+  }
+  class Maple {
+    constructor(low) { this.low = low; this.wind = 0; this.extra = []; this.bloomScale = 0.45; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#f3b86c'], [0.35, '#f7d18e'], [0.55, '#fde9c2'], [1, '#e9ddc8']]);
+      g.fillRect(0, 0, w, h);
+      glow(g, w * 0.3, h * 0.3, w * 0.7, '255,220,150', 0.5);
+      // 白牆（下半部），上有灰瓦
+      const wallTop = (this.wallTop = h * 0.58);
+      const wg = g.createLinearGradient(0, wallTop, 0, h);
+      wg.addColorStop(0, '#f6f1e8'); wg.addColorStop(1, '#d8d0c2');
+      g.fillStyle = wg; g.fillRect(0, wallTop, w, h - wallTop);
+      g.fillStyle = '#4c4f58'; g.fillRect(0, wallTop - 10 * sc, w, 12 * sc);
+      g.fillStyle = '#5d616b';
+      for (let x = 0; x < w; x += 9 * sc) { g.beginPath(); g.arc(x + 4 * sc, wallTop - 10 * sc, 4.5 * sc, Math.PI, 0); g.fill(); }
+      g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(0, wallTop + 2 * sc, w, 6 * sc);
+      // 月洞門：透出遠方的寶塔與夕照
+      const gx = (this.gx = w * 0.5), gy = (this.gy = wallTop + (h - wallTop) * 0.52), gr2 = (this.gr = Math.min(w * 0.3, (h - wallTop) * 0.42));
+      g.save(); g.beginPath(); g.arc(gx, gy, gr2, 0, TAU); g.clip();
+      g.fillStyle = vgrad(g, h, [[wallTop / h, '#f5b36a'], [1, '#c8743e']]); g.fillRect(gx - gr2, gy - gr2, gr2 * 2, gr2 * 2);
+      glow(g, gx + gr2 * 0.2, gy, gr2, '255,230,170', 0.6);
+      g.fillStyle = 'rgba(110,60,40,0.75)';
+      const tx = gx - gr2 * 0.25;
+      for (let k = 0; k < 5; k++) {
+        const ww = gr2 * (0.34 - k * 0.05), yy = gy + gr2 * 0.4 - k * gr2 * 0.22;
+        g.fillRect(tx - ww * 0.35, yy - gr2 * 0.14, ww * 0.7, gr2 * 0.14);
+        g.beginPath(); g.moveTo(tx - ww * 0.65, yy - gr2 * 0.12); g.quadraticCurveTo(tx, yy - gr2 * 0.24, tx + ww * 0.65, yy - gr2 * 0.12); g.lineTo(tx, yy - gr2 * 0.18); g.fill();
+      }
+      g.fillStyle = 'rgba(80,50,40,0.6)';
+      g.beginPath(); g.moveTo(gx - gr2, gy + gr2 * 0.6); g.quadraticCurveTo(gx, gy + gr2 * 0.35, gx + gr2, gy + gr2 * 0.55); g.lineTo(gx + gr2, gy + gr2); g.lineTo(gx - gr2, gy + gr2); g.fill();
+      g.restore();
+      g.strokeStyle = '#9a9488'; g.lineWidth = 6 * sc; g.beginPath(); g.arc(gx, gy, gr2 + 3 * sc, 0, TAU); g.stroke();
+      g.strokeStyle = '#efe9de'; g.lineWidth = 2 * sc; g.beginPath(); g.arc(gx, gy, gr2 + 6 * sc, 0, TAU); g.stroke();
+      // 楓樹：枝幹 + 一團團紅黃葉叢
+      this.leafImgs = [mapleSprite('#ffcf5a', '#e8641c'), mapleSprite('#ff7a3a', '#b8180f'), mapleSprite('#ffb04a', '#d23a12')];
+      const tree = (x0, y0, ang, len, wd, d) => {
+        if (d <= 0) {
+          for (let k = 0; k < 9; k++) {
+            const img = this.leafImgs[(Math.random() * 3) | 0];
+            const s = rand(10, 18) * sc;
+            g.save(); g.translate(x0 + rand(-18, 18) * sc, y0 + rand(-14, 14) * sc); g.rotate(rand(0, TAU));
+            g.drawImage(img.cv, -s, -s, s * 2, s * 2); g.restore();
+          }
+          return;
+        }
+        const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len;
+        g.strokeStyle = '#3a2418'; g.lineWidth = wd; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2 + rand(-8, 8), (y0 + y1) / 2 + rand(-8, 8), x1, y1); g.stroke();
+        tree(x1, y1, ang + rand(0.25, 0.6), len * 0.72, wd * 0.65, d - 1);
+        tree(x1, y1, ang - rand(0.25, 0.6), len * 0.72, wd * 0.65, d - 1);
+      };
+      tree(-10, h * 0.62, -0.75, 90 * sc, 12 * sc, 5);
+      tree(w + 10, h * 0.6, Math.PI + 0.7, 80 * sc, 11 * sc, 5);
+      // 斜陽光束
+      const R = (this.ray = layer(60, 500));
+      const rg = R.g.createLinearGradient(0, 0, 0, 500);
+      rg.addColorStop(0, 'rgba(255,230,170,0.5)'); rg.addColorStop(1, 'rgba(255,230,170,0)');
+      R.g.fillStyle = rg; R.g.beginPath(); R.g.moveTo(22, 0); R.g.lineTo(38, 0); R.g.lineTo(60, 500); R.g.lineTo(0, 500); R.g.fill();
+      this.leaves = [];
+      for (let i = 0; i < (this.low ? 12 : 26); i++) this.leaves.push(this.newLeaf(true));
+    }
+    newLeaf(anywhere, x, y) {
+      return { x: x != null ? x : rand(-0.2, 1) * this.w, y: y != null ? y : anywhere ? rand(0, this.h) : rand(-30, -10), vx: rand(10, 30), vy: rand(25, 50), rot: rand(0, TAU), vr: rand(-2, 2), flip: rand(0, TAU), vf: rand(2, 4), s: rand(9, 15) * this.sc, k: (Math.random() * 3) | 0 };
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.wind *= Math.pow(0.3, s);
+      const upd = (p) => { p.x += (p.vx + this.wind) * s; p.y += p.vy * s; p.rot += p.vr * s; p.flip += p.vf * s; };
+      for (const p of this.leaves) { upd(p); if (p.y > this.h + 20 || p.x > this.w + 30) Object.assign(p, this.newLeaf(false)); }
+      for (const p of this.extra) { upd(p); p.vy += 40 * s; }
+      this.extra = this.extra.filter((p) => p.y < this.h + 20 && p.x < this.w + 40);
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 5; i++) {
+        g.save(); g.globalAlpha = 0.12 + 0.06 * Math.sin(t / 1800 + i) + beat * 0.05;
+        g.translate(w * (0.05 + i * 0.12), -20); g.rotate(-0.5);
+        g.drawImage(this.ray.cv, -30, 0, 60 * (1 + i * 0.2), h * 1.3); g.restore();
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      const drawL = (p) => {
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(1, Math.cos(p.flip));
+        g.drawImage(this.leafImgs[p.k].cv, -p.s, -p.s, p.s * 2, p.s * 2); g.restore();
+      };
+      for (const p of this.leaves) drawL(p);
+      for (const p of this.extra) drawL(p);
+    }
+    burst(d, B) {
+      this.wind = Math.min(500, this.wind + 70 * d.lines + (d.lines >= 4 ? 150 : 0));
+      const n = Math.min(this.low ? 10 : 30, d.lines * (this.low ? 3 : 8));
+      for (let i = 0; i < n; i++) {
+        const row = d.rows && d.rows.length ? d.rows[i % d.rows.length].vy : 18;
+        const p = this.newLeaf(false, B.x + rand(0, B.w), B.y + (row + 0.5) * B.c);
+        p.vx = rand(60, 220); p.vy = rand(-90, 10);
+        this.extra.push(p);
+      }
+    }
+  }
+
+  // =========================================================
+  // 海上風暴：翻滾烏雲、斜雨、層層巨浪與浪花、燈塔旋轉光束、閃電
+  // =========================================================
+  class Storm {
+    constructor(low) { this.low = low; this.flash = 0; this.bolts = []; this.boltTimer = 3; this.intensity = 0; }
+    setIntensity(v) { this.intensity = v; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#05070c'], [0.5, '#141c2a'], [0.62, '#26344a'], [1, '#070b12']]);
+      g.fillRect(0, 0, w, h);
+      // 燈塔岩岸（右側）
+      const lx = (this.lx = w * 0.84), ly = (this.ly = h * 0.5);
+      g.fillStyle = '#05080c';
+      g.beginPath(); g.moveTo(w * 0.62, h * 0.72); g.quadraticCurveTo(w * 0.75, h * 0.58, lx - 20 * sc, ly + 60 * sc); g.lineTo(w, ly + 40 * sc); g.lineTo(w, h * 0.75); g.closePath(); g.fill();
+      const tw = 16 * sc, th = 70 * sc;
+      const tg = g.createLinearGradient(lx - tw, 0, lx + tw, 0);
+      tg.addColorStop(0, '#d8d8d8'); tg.addColorStop(0.5, '#f4f4f4'); tg.addColorStop(1, '#8a8a8a');
+      g.fillStyle = tg;
+      g.beginPath(); g.moveTo(lx - tw * 0.6, ly + 60 * sc); g.lineTo(lx - tw * 0.4, ly + 60 * sc - th); g.lineTo(lx + tw * 0.4, ly + 60 * sc - th); g.lineTo(lx + tw * 0.6, ly + 60 * sc); g.fill();
+      g.fillStyle = '#b8282a';
+      for (let k = 0; k < 2; k++) g.fillRect(lx - tw * 0.55 + k * tw * 0.04, ly + 60 * sc - th * (0.3 + k * 0.35), tw * 1.1 - k * tw * 0.08, th * 0.12);
+      g.fillStyle = '#1c1c1c'; g.fillRect(lx - tw * 0.5, ly + 60 * sc - th - 14 * sc, tw, 3 * sc);
+      g.fillStyle = '#ffe9a8'; g.fillRect(lx - tw * 0.32, ly + 60 * sc - th - 11 * sc, tw * 0.64, 11 * sc);
+      g.fillStyle = '#1c1c1c'; g.beginPath(); g.moveTo(lx - tw * 0.45, ly + 60 * sc - th - 11 * sc); g.lineTo(lx, ly + 60 * sc - th - 22 * sc); g.lineTo(lx + tw * 0.45, ly + 60 * sc - th - 11 * sc); g.fill();
+      this.lampY = ly + 60 * sc - th - 5.5 * sc;
+      // 烏雲素材
+      // 烏雲：多層灰藍雲團（中心不發白）
+      const C = (this.cloud = layer(64, 64));
+      const cgr = C.g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      cgr.addColorStop(0, 'rgba(46,56,74,0.95)'); cgr.addColorStop(0.55, 'rgba(34,42,58,0.7)'); cgr.addColorStop(1, 'rgba(20,26,38,0)');
+      C.g.fillStyle = cgr; C.g.fillRect(0, 0, 64, 64);
+      this.clouds = [];
+      for (let i = 0; i < (this.low ? 14 : 28); i++) this.clouds.push({ x: rand(-0.2, 1.2) * w, y: rand(-0.05, 0.38) * h, r: rand(80, 170) * sc, v: rand(10, 30) * sc, a: rand(0.6, 0.95) });
+      this.drops = [];
+      for (let i = 0; i < (this.low ? 70 : 170); i++) this.drops.push({ x: rand(0, w * 1.3), y: rand(0, h), v: rand(800, 1100) * sc, l: rand(14, 26) * sc });
+      this.waves = [0.66, 0.74, 0.83, 0.93].map((k, i) => ({ y: h * k, amp: (8 + i * 6) * sc, len: rand(0.012, 0.02) / sc, sp: 0.8 + i * 0.35, ph: rand(0, TAU), col: ['#1a2a3c', '#14222f', '#0e1924', '#08111a'][i] }));
+    }
+    bolt() {
+      const x0 = rand(0.05, 0.7) * this.w;
+      const pts = [[x0, 0]];
+      let x = x0, y = 0;
+      const end = this.h * rand(0.45, 0.62);
+      while (y < end) { y += rand(18, 36) * this.sc; x += rand(-22, 22) * this.sc; pts.push([x, y]); }
+      const branch = [];
+      const bi = (pts.length * rand(0.3, 0.6)) | 0;
+      let bx = pts[bi][0], by = pts[bi][1];
+      branch.push([bx, by]);
+      for (let k = 0; k < 4; k++) { by += rand(15, 30) * this.sc; bx += rand(10, 30) * this.sc * (Math.random() < 0.5 ? -1 : 1); branch.push([bx, by]); }
+      this.bolts.push({ pts, branch, t: 0, life: 0.35 });
+      this.flash = Math.max(this.flash, 1);
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.008, s);
+      for (const c of this.clouds) { c.x += c.v * s; if (c.x - c.r > this.w) c.x = -c.r; }
+      for (const d of this.drops) { d.y += d.v * s; d.x -= d.v * 0.25 * s; if (d.y > this.h) { d.y = rand(-40, 0); d.x = rand(0, this.w * 1.3); } }
+      for (const b of this.bolts) b.t += s;
+      this.bolts = this.bolts.filter((b) => b.t < b.life);
+      this.boltTimer -= s;
+      if (this.boltTimer <= 0) { this.bolt(); this.boltTimer = rand(4, 9) / (1 + this.intensity * 0.35); }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h, ts = t / 1000;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      // 燈塔光束
+      g.globalCompositeOperation = 'lighter';
+      const ang = ts * 0.9;
+      const dir = Math.cos(ang);
+      const len = w * 1.2;
+      const spread = 0.12;
+      const bx = this.lx, by = this.lampY;
+      const bgr = g.createLinearGradient(bx, by, bx + dir * len, by);
+      bgr.addColorStop(0, `rgba(255,240,180,${0.35 * Math.abs(dir) + 0.05})`); bgr.addColorStop(1, 'rgba(255,240,180,0)');
+      g.fillStyle = bgr;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + dir * len, by - len * spread * Math.abs(dir)); g.lineTo(bx + dir * len, by + len * spread * Math.abs(dir)); g.fill();
+      glow(g, bx, by, 30 * this.sc, '255,240,180', 0.6);
+      g.globalCompositeOperation = 'source-over';
+      // 烏雲
+      for (const c of this.clouds) {
+        g.globalAlpha = c.a;
+        g.drawImage(this.cloud.cv, c.x - c.r, c.y - c.r * 0.55, c.r * 2, c.r * 1.1);
+      }
+      g.globalAlpha = 1;
+      // 閃電
+      g.globalCompositeOperation = 'lighter';
+      for (const b of this.bolts) {
+        const a = 1 - b.t / b.life;
+        for (const [lw, al] of [[6, 0.25], [2.2, 1]]) {
+          g.strokeStyle = `rgba(210,225,255,${a * al})`; g.lineWidth = lw * this.sc;
+          g.beginPath(); b.pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+          g.beginPath(); b.branch.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+        }
+      }
+      if (this.flash > 0.02) { g.fillStyle = `rgba(190,205,255,${this.flash * 0.28})`; g.fillRect(0, 0, w, h); }
+      g.globalCompositeOperation = 'source-over';
+      // 巨浪與浪花
+      for (const wv of this.waves) {
+        g.fillStyle = wv.col;
+        g.beginPath(); g.moveTo(0, h);
+        const pts = [];
+        for (let x = 0; x <= w + 8; x += 8) {
+          const y = wv.y + Math.sin(x * wv.len + ts * wv.sp + wv.ph) * wv.amp + Math.sin(x * wv.len * 2.3 - ts * wv.sp * 1.4) * wv.amp * 0.35;
+          pts.push([x, y]); g.lineTo(x, y);
+        }
+        g.lineTo(w, h); g.closePath(); g.fill();
+        g.strokeStyle = `rgba(220,235,255,${0.25 + this.flash * 0.2})`; g.lineWidth = 1.5 * this.sc;
+        g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+        g.fillStyle = 'rgba(230,240,255,0.5)';
+        for (let i = 0; i < pts.length; i += 3) { const [x, y] = pts[i]; if (pts[i + 1] && pts[i + 1][1] > y && Math.random() < 0.4) g.fillRect(x, y - 2, 3 * this.sc, 1.5); }
+      }
+      // 雨
+      g.strokeStyle = 'rgba(170,190,220,0.35)'; g.lineWidth = 1;
+      g.beginPath();
+      for (const d of this.drops) { g.moveTo(d.x, d.y); g.lineTo(d.x + d.l * 0.25, d.y - d.l); }
+      g.stroke();
+    }
+    burst(d) { if (d.lines >= 2 || d.tspin) this.bolt(); if (d.lines >= 4) setTimeout(() => this.bolt(), 180); }
+  }
+
+  // =========================================================
+  // 飛龍：祥雲、金龍追逐火焰寶珠（龍身沿軌跡蜿蜒、背鰭、龍角、龍鬚）
+  // =========================================================
+  class Dragon {
+    constructor(low) { this.low = low; this.flash = 0; this.t = 0; this.speed = 1; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#0b0f2a'], [0.45, '#1d2a5a'], [0.75, '#6a3a6a'], [1, '#c4664a']]);
+      g.fillRect(0, 0, w, h);
+      glow(g, w * 0.5, h * 0.95, w * 0.9, '255,170,90', 0.35);
+      for (let i = 0; i < 150; i++) { g.fillStyle = `rgba(255,240,220,${rand(0.1, 0.5)})`; g.fillRect(rand(0, w), rand(0, h * 0.5), 1, 1); }
+      this.clouds = [];
+      for (let i = 0; i < 9; i++) this.clouds.push({ x: rand(0, w), y: rand(0.1, 0.95) * h, s: rand(0.6, 1.2) * sc, a: rand(0.35, 0.7), v: rand(5, 14) * sc });
+      this.cloudImg = layer(140, 70);
+      // 將祥雲畫成素材
+      const C = this.cloudImg, cg = C.g;
+      cg.save(); cg.translate(70, 40);
+      cg.fillStyle = 'rgba(255,230,190,0.2)'; cg.strokeStyle = 'rgba(255,210,140,0.95)'; cg.lineWidth = 2;
+      cg.beginPath(); cg.moveTo(-60, 10); cg.quadraticCurveTo(-40, -20, -10, -5); cg.quadraticCurveTo(10, -30, 35, -10); cg.quadraticCurveTo(65, -15, 60, 10); cg.closePath(); cg.fill(); cg.stroke();
+      for (const [cx, cy, r] of [[-30, -6, 10], [10, -14, 13], [40, -4, 9]]) {
+        cg.beginPath();
+        for (let k = 0; k < 40; k++) { const a2 = k / 40 * TAU * 1.6; const rr = r * (1 - k / 50); cg.lineTo(cx + Math.cos(a2) * rr, cy + Math.sin(a2) * rr); }
+        cg.stroke();
+      }
+      cg.restore();
+      this.pearl = softDot('255,120,40');
+      this.segN = this.low ? 36 : 48;
+    }
+    headPos(t) {
+      const w = this.w, h = this.h;
+      return [w * (0.5 + 0.4 * Math.sin(t * 0.5)), h * (0.42 + 0.3 * Math.sin(t * 0.8 + 1) * Math.cos(t * 0.31))];
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.2, s);
+      this.speed = 1 + this.flash * 1.5;
+      this.t += s * this.speed;
+      for (const c of this.clouds) { c.x += c.v * s; if (c.x > this.w + 80 * c.s) c.x = -80 * c.s; }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h, sc = this.sc;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      for (const c of this.clouds) { g.globalAlpha = c.a; g.drawImage(this.cloudImg.cv, c.x - 70 * c.s, c.y - 35 * c.s, 140 * c.s, 70 * c.s); }
+      g.globalAlpha = 1;
+      // 寶珠（龍頭前方）
+      const ph = this.headPos(this.t + 0.35);
+      g.globalCompositeOperation = 'lighter';
+      const pr = (16 + beat * 6 + this.flash * 10) * sc;
+      g.drawImage(this.pearl.cv, ph[0] - pr * 2.5, ph[1] - pr * 2.5, pr * 5, pr * 5);
+      glow(g, ph[0], ph[1], pr * 1.2, '255,250,220', 0.9);
+      g.globalCompositeOperation = 'source-over';
+      // 龍身：沿軌跡取樣
+      const width = (i) => (34 * sc) * (i < 4 ? 0.7 + i * 0.08 : Math.max(0.15, 1 - (i - 4) / this.segN * 0.95));
+      // 沿飛行軌跡按距離取樣：每節間隔固定，龍身才會拉長蜿蜒
+      const segs = [this.headPos(this.t)];
+      let tt = this.t;
+      for (let i = 1; i < this.segN; i++) {
+        const gap = Math.max(4 * sc, width(i) * 0.42);
+        const [px, py] = segs[i - 1];
+        let p = null;
+        for (let k = 0; k < 200; k++) {
+          tt -= 0.004;
+          const q = this.headPos(tt);
+          if (Math.hypot(q[0] - px, q[1] - py) >= gap) { p = q; break; }
+        }
+        segs.push(p || this.headPos(tt));
+      }
+      // 背鰭（紅色）
+      g.fillStyle = '#c8281e';
+      for (let i = 2; i < segs.length - 2; i += 2) {
+        const [x0, y0] = segs[i - 1], [x1, y1] = segs[i + 1];
+        const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+        const nx = -dy / l, ny = dx / l, wv = width(i);
+        const [x, y] = segs[i];
+        g.beginPath(); g.moveTo(x + nx * wv * 0.45 - dx * 0.3, y + ny * wv * 0.45 - dy * 0.3); g.lineTo(x + nx * wv * 1.05, y + ny * wv * 1.05); g.lineTo(x + nx * wv * 0.45 + dx * 0.3, y + ny * wv * 0.45 + dy * 0.3); g.fill();
+      }
+      // 身體：由尾往頭畫圓節，金色漸層 + 鱗片
+      for (let i = segs.length - 1; i >= 0; i--) {
+        const [x, y] = segs[i];
+        const r = width(i) * 0.55;
+        const bg = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+        bg.addColorStop(0, '#fff3b0'); bg.addColorStop(0.5, '#f0b434'); bg.addColorStop(1, '#8a5210');
+        g.fillStyle = bg; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+        if (i % 2 === 0 && r > 3) { g.strokeStyle = 'rgba(120,60,10,0.45)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y + r * 0.2, r * 0.6, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
+      }
+      // 龍爪（兩對）
+      for (const i of [8, 22]) {
+        if (!segs[i + 1]) continue;
+        const [x, y] = segs[i], [x1, y1] = segs[i + 1];
+        const dx = x1 - x, dy = y1 - y, l = Math.hypot(dx, dy) || 1;
+        const nx = dy / l, ny = -dx / l, wv = width(i);
+        g.strokeStyle = '#d8962a'; g.lineWidth = 3 * sc; g.lineCap = 'round';
+        const fx = x + nx * wv * 1.2 + Math.sin(t / 200 + i) * 3, fy = y + ny * wv * 1.2;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(fx, fy); g.stroke();
+        g.strokeStyle = '#fff0c0'; g.lineWidth = 1.2 * sc;
+        for (const a of [-0.5, 0, 0.5]) { g.beginPath(); g.moveTo(fx, fy); g.lineTo(fx + Math.cos(Math.atan2(ny, nx) + a) * 5 * sc, fy + Math.sin(Math.atan2(ny, nx) + a) * 5 * sc); g.stroke(); }
+      }
+      // 龍頭
+      const [hx, hy] = segs[0];
+      const [nx2, ny2] = segs[2];
+      const ang = Math.atan2(hy - ny2, hx - nx2);
+      g.save(); g.translate(hx, hy); g.rotate(ang);
+      const k = sc * 1.9;
+      // 龍鬚
+      g.strokeStyle = 'rgba(255,240,200,0.9)'; g.lineWidth = 1.2 * k;
+      for (const sgn of [-1, 1]) {
+        g.beginPath(); g.moveTo(16 * k, sgn * 4 * k);
+        for (let q = 1; q <= 10; q++) g.lineTo(16 * k - q * 5 * k, sgn * (4 + q * 2.2) * k + Math.sin(t / 250 + q * 0.7) * 3 * k);
+        g.stroke();
+      }
+      // 鬃毛
+      g.fillStyle = '#d03a22';
+      g.beginPath(); g.moveTo(-6 * k, -8 * k); g.quadraticCurveTo(-22 * k, -16 * k, -26 * k, -4 * k); g.quadraticCurveTo(-20 * k, 0, -26 * k, 6 * k); g.quadraticCurveTo(-16 * k, 14 * k, -6 * k, 8 * k); g.fill();
+      // 頭形
+      const hg = g.createLinearGradient(0, -10 * k, 0, 10 * k);
+      hg.addColorStop(0, '#fff0a0'); hg.addColorStop(1, '#c47c16');
+      g.fillStyle = hg;
+      g.beginPath(); g.moveTo(-8 * k, -9 * k); g.quadraticCurveTo(10 * k, -11 * k, 22 * k, -4 * k); g.lineTo(24 * k, 2 * k); g.quadraticCurveTo(12 * k, 4 * k, 20 * k, 7 * k); g.quadraticCurveTo(6 * k, 11 * k, -8 * k, 9 * k); g.closePath(); g.fill();
+      // 龍角
+      g.strokeStyle = '#f5e2a8'; g.lineWidth = 2.2 * k;
+      g.beginPath(); g.moveTo(0, -8 * k); g.quadraticCurveTo(-8 * k, -18 * k, -18 * k, -22 * k); g.stroke();
+      g.beginPath(); g.moveTo(-9 * k, -16 * k); g.lineTo(-6 * k, -22 * k); g.stroke();
+      // 眼
+      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(8 * k, -4 * k, 3 * k, 2 * k, 0, 0, TAU); g.fill();
+      g.fillStyle = '#c00'; g.beginPath(); g.arc(8.5 * k, -4 * k, 1.3 * k, 0, TAU); g.fill();
+      g.restore();
+    }
+    burst(d) { this.flash = Math.min(1.5, this.flash + 0.3 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
+  }
+
   root.LumenScenes = {
     星空: Starfield, 深海: DeepSea, 竹林: Bamboo, 極光: Aurora, 水墨: InkWash, 螢火森林: Firefly, 霓虹都市: NeonCity,
     敦煌: Dunhuang, 櫻花: Sakura, 冰晶洞窟: IceCave, 燈節: Lantern, 雨夜: RainyCity, 熔岩: Lava, 夕陽雲海: Sunset,
     長城: GreatWall, 荷塘月色: LotusPond, 仙山: FairyPeaks,
+    土星環: Saturn, 楓紅: Maple, 海上風暴: Storm, 飛龍: Dragon,
   };
 })(typeof self !== 'undefined' ? self : this);

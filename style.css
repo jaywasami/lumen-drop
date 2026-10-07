@@ -121,3 +121,19 @@ body.post-on #c { opacity: 0; }
 #touch .b-ccw, #touch .b-cw { font-size: calc(34px * var(--bfs, 1)); }
 #touch .b-hold, #touch .b-180 { font-size: calc(15px * var(--bfs, 1)); }
 #touch .b-up { font-size: calc(24px * var(--bfs, 1)); }
+
+/* 自訂按鍵位置 */
+#touch.custom .pad { display: contents; }
+#touch.custom .b { position: absolute; }
+#touch.editing .b { outline: 2px dashed rgba(255, 255, 255, 0.55); outline-offset: 2px; cursor: grab; }
+#touch.editing .b.sel { outline: 3px solid var(--accent); box-shadow: 0 0 24px rgba(110, 231, 255, 0.8); }
+#touch.editing .pause-btn { display: none; }
+#pad-editor {
+  position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top) + 10px); z-index: 30;
+  width: min(380px, calc(100% - 20px)); padding: 12px; border-radius: 16px; background: rgba(10, 12, 30, 0.88);
+  border: 1px solid rgba(110, 231, 255, 0.35); box-shadow: 0 0 30px rgba(0, 0, 0, 0.5); text-align: center;
+}
+.pe-hint { font-size: 13px; color: #cfd5f5; margin-bottom: 10px; }
+.pe-row { display: flex; gap: 8px; }
+.pe-row button { flex: 1; appearance: none; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #fff; font: inherit; font-size: 15px; padding: 10px 4px; border-radius: 12px; }
+.pe-row button.primary { background: linear-gradient(135deg, #2bb8ff, #7a5cff); border-color: transparent; font-weight: 700; }

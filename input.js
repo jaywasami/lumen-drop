@@ -106,6 +106,7 @@
         const confirmDrop = () => action === 'hardDrop' && this.settings.hdMode !== 'press';
         btn.addEventListener('pointerdown', (e) => {
           e.preventDefault();
+          if (this.editing) return; // 自訂按鍵位置時不觸發遊戲動作
           try { btn.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
           if (confirmDrop()) {
             if (!this.getGame()) return;

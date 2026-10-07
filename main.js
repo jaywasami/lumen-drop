@@ -12,7 +12,7 @@
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, difficulty: 'relaxed', transitions: true,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -102,14 +102,18 @@
     { name: '荷塘月色', accent: [255, 170, 205], style: 'jade', sub: '荷塘月色，曲曲折折' },
     { name: '螢火森林', accent: [200, 255, 120], style: 'glass', sub: '森林在夜裡發光' },
     { name: '霓虹都市', accent: [255, 93, 230], style: 'neon', sub: '午夜的城市不睡' },
+    { name: '土星環', accent: [255, 200, 140], style: 'gem', sub: '在星環的陰影裡漂流' },
     { name: '敦煌', accent: [240, 180, 90], style: 'gold', sub: '飛天的彩帶穿過千年' },
     { name: '櫻花', accent: [255, 166, 216], style: 'soft', sub: '花落知多少' },
     { name: '長城', accent: [255, 190, 130], style: 'gold', sub: '萬里長城今猶在' },
     { name: '冰晶洞窟', accent: [150, 230, 255], style: 'glass', sub: '光在冰裡迷了路' },
+    { name: '楓紅', accent: [255, 120, 60], style: 'porcelain', sub: '停車坐愛楓林晚', light: true },
     { name: '燈節', accent: [255, 170, 60], style: 'gold', sub: '東風夜放花千樹' },
     { name: '雨夜', accent: [120, 180, 255], style: 'neon', sub: '霓虹在雨裡暈開' },
     { name: '仙山', accent: [150, 220, 210], style: 'porcelain', sub: '雲深不知處', light: true },
+    { name: '海上風暴', accent: [140, 190, 255], style: 'glass', sub: '風暴中守著一盞燈' },
     { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
+    { name: '飛龍', accent: [255, 200, 80], style: 'gold', sub: '龍騰九霄' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
   ];
   let themeIdx = 0;
@@ -305,8 +309,96 @@
     pauseBtn.style.fontSize = `${Math.max(11, cell * 0.55)}px`;
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
     touchEl.classList.toggle('show180', !!settings.show180);
+    applyCustomPad();
     if (pw !== vw || ph !== vh) for (const s of scenes) if (s) s.resize(vw, vh);
   }
+  // ================= 自訂按鍵位置 =================
+  const padButtons = () => Array.from(touchEl.querySelectorAll('.b'));
+  function applyCustomPad() {
+    const cp = settings.customPad;
+    touchEl.classList.toggle('custom', !!cp);
+    for (const b of padButtons()) {
+      const r = cp && cp[b.dataset.action];
+      if (cp && r) {
+        b.style.left = `${r.x * vw}px`; b.style.top = `${r.y * vh}px`;
+        b.style.width = `${r.w * vw}px`; b.style.height = `${r.h * vh}px`;
+      } else if (cp) {
+        b.style.left = `${vw * 0.42}px`; b.style.top = `${vh * 0.8}px`; b.style.width = '64px'; b.style.height = '56px';
+      } else {
+        b.style.left = b.style.top = b.style.width = b.style.height = '';
+      }
+    }
+  }
+  function capturePad() {
+    const cp = {};
+    for (const b of padButtons()) {
+      const r = b.getBoundingClientRect();
+      if (r.width === 0) continue;
+      cp[b.dataset.action] = { x: r.left / vw, y: r.top / vh, w: r.width / vw, h: r.height / vh };
+    }
+    return cp;
+  }
+  let editSel = null, editReturn = null, editWasHidden = false;
+  function openPadEditor() {
+    editReturn = settingsReturn;
+    showOverlay(null);
+    if (settings.controls !== 'buttons') { settings.controls = 'buttons'; layout(); }
+    editWasHidden = touchEl.classList.contains('hidden');
+    touchEl.classList.remove('hidden');
+    if (!settings.customPad) { settings.customPad = capturePad(); applyCustomPad(); }
+    touchEl.classList.add('editing');
+    input.editing = true;
+    $('pad-editor').classList.remove('hidden');
+  }
+  function closePadEditor() {
+    if (editSel) editSel.classList.remove('sel');
+    editSel = null;
+    touchEl.classList.remove('editing');
+    input.editing = false;
+    $('pad-editor').classList.add('hidden');
+    if (editWasHidden) touchEl.classList.add('hidden');
+    saveSettings();
+    buildSettings();
+    showOverlay('settings');
+    settingsReturn = editReturn || 'menu';
+  }
+  function storeBtn(b) {
+    const r = b.getBoundingClientRect();
+    settings.customPad[b.dataset.action] = { x: r.left / vw, y: r.top / vh, w: r.width / vw, h: r.height / vh };
+  }
+  for (const b of padButtons()) {
+    let drag = null;
+    b.addEventListener('pointerdown', (e) => {
+      if (!input.editing) return;
+      e.preventDefault();
+      if (editSel) editSel.classList.remove('sel');
+      editSel = b; b.classList.add('sel');
+      const r = b.getBoundingClientRect();
+      drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+      try { b.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    });
+    b.addEventListener('pointermove', (e) => {
+      if (!input.editing || !drag || drag.id !== e.pointerId) return;
+      const r = b.getBoundingClientRect();
+      const x = Math.max(0, Math.min(vw - r.width, e.clientX - drag.dx));
+      const y = Math.max(0, Math.min(vh - r.height, e.clientY - drag.dy));
+      b.style.left = `${x}px`; b.style.top = `${y}px`;
+    });
+    const end = (e) => { if (!input.editing || !drag || drag.id !== e.pointerId) return; drag = null; storeBtn(b); };
+    b.addEventListener('pointerup', end);
+    b.addEventListener('pointercancel', end);
+  }
+  function resizeSel(k) {
+    if (!editSel) return;
+    const r = editSel.getBoundingClientRect();
+    const w = Math.max(40, Math.min(vw * 0.6, r.width * k)), hgt = Math.max(36, Math.min(vh * 0.3, r.height * k));
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    editSel.style.width = `${w}px`; editSel.style.height = `${hgt}px`;
+    editSel.style.left = `${Math.max(0, Math.min(vw - w, cx - w / 2))}px`;
+    editSel.style.top = `${Math.max(0, Math.min(vh - hgt, cy - hgt / 2))}px`;
+    storeBtn(editSel);
+  }
+
   function boardInfo() { return { x: bx, y: by, w: cell * 10, h: cell * VIS, c: cell, cx: bx + cell * 5, cy: by + cell * 10 }; }
 
   // ================= 特效 =================
@@ -463,12 +555,12 @@
         const idx = (d.level - 1) % THEMES.length;
         Snd.setBuild(false);
         intensity = musicStage();
-        Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
         Snd.play('levelUp');
         if (settings.transitions && mode === 'playing') {
           startTransition(idx, d.level);
           break;
         }
+        Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
         setTheme(idx);
         popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
         fx.rings.push({ t: 0, life: 1.1 });
@@ -532,92 +624,213 @@
     releaseWake();
   }
   // ================= 過關過場 =================
-  const TR_LEN = 3.4;
+  // 時間軸（秒）：0 光帶掃過＋LEVEL CLEAR 逐字飛入 → 0.6 成績 → 1.6 超空間隧道 → 2.7 白光抵達、
+  // 新場景光圈擴散 → 3.1 場景名逐字浮現、光芒旋轉、副標打字 → 5.0 READY → 5.45 GO! → 5.9 結束
+  const TR_LEN = 5.9, TR_WARP = 1.6, TR_ARRIVE = 2.7, TR_IRIS = 1.1;
   function startTransition(toIdx, level) {
     const secs = (game.time - levelStart.time) / 1000;
     tr = {
-      t: 0, to: toIdx, level, switched: false,
+      t: 0, to: toIdx, level, switched: false, warped: false, ready: false, go: false, prev: null, streaks: [],
       lines: game.lines - levelStart.lines, score: game.score - levelStart.score,
       time: `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`, combo: levelStart.maxCombo,
     };
     mode = 'transition';
     fx.popups.length = 0;
     input.releaseAll();
+    // 場地四周噴出彩光
+    for (let i = 0; i < (settings.fx === 'low' ? 30 : 90); i++) {
+      const side = i % 4;
+      const x = side < 2 ? bx + Math.random() * cell * 10 : side === 2 ? bx : bx + cell * 10;
+      const y = side === 0 ? by : side === 1 ? by + cell * VIS : by + Math.random() * cell * VIS;
+      const a = Math.atan2(y - (by + cell * 10), x - (bx + cell * 5)) + (Math.random() - 0.5) * 0.8;
+      const sp = cell * (6 + Math.random() * 10);
+      addParticle({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.2, max: 1.2, size: cell * (0.1 + Math.random() * 0.15), color: Object.values(COLORS)[i % 7], g: 0 });
+    }
   }
   function updateTransition(dt) {
-    tr.t += dt / 1000;
-    if (!tr.switched && tr.t > 0.8) {
-      tr.switched = true;
-      setTheme(tr.to);
-      fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.3, s: 1.2 });
-      fx.flash = Math.max(fx.flash, 0.45);
-      fx.pulse = 1;
+    const s = dt / 1000;
+    tr.t += s;
+    const t = tr.t;
+    if (!tr.warped && t >= TR_WARP) { tr.warped = true; Snd.play('warp'); }
+    // 超空間光束：越接近抵達越密、越快
+    if (t >= TR_WARP && t < TR_ARRIVE + 0.2) {
+      const k = Math.min(1, (t - TR_WARP) / (TR_ARRIVE - TR_WARP));
+      const n = Math.floor((settings.fx === 'low' ? 60 : 160) * k * s * 10);
+      for (let i = 0; i < n; i++) tr.streaks.push({ a: Math.random() * Math.PI * 2, r: Math.random() * 0.15, v: 0.6 + Math.random() * 1.2, w: 0.5 + Math.random() * 1.8, hue: Math.random() });
+      fx.aberr = Math.max(fx.aberr, 0.6 + k * 1.6);
     }
-    if (tr.t >= TR_LEN) {
+    for (const st of tr.streaks) st.r += st.v * s * (1 + st.r * 4);
+    tr.streaks = tr.streaks.filter((st) => st.r < 1.6);
+    if (!tr.switched && t >= TR_ARRIVE) {
+      tr.switched = true;
+      tr.prev = scene;
+      setTheme(tr.to, true);
+      Snd.playSong(THEMES[tr.to].name, musicStage(), musicRate());
+      Snd.play('arrive');
+      fx.flash = 1;
+      fx.pulse = 1;
+      fx.shake = Math.max(fx.shake, 10);
+      fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.6, s: 1.6 });
+      fx.rings.push({ t: 0, life: 1.3 });
+    }
+    if (tr.prev && t > TR_ARRIVE + TR_IRIS) tr.prev = null;
+    if (!tr.ready && t >= 5.0) { tr.ready = true; Snd.play('count'); }
+    if (!tr.go && t >= 5.45) { tr.go = true; Snd.play('goShout'); }
+    if (t >= TR_LEN) {
       mode = 'playing';
       levelStart = { time: game.time, score: game.score, lines: game.lines, maxCombo: 0 };
       tr = null;
     }
   }
   const SERIF = '"Noto Serif TC", "Songti TC", "Source Han Serif TC", "PMingLiU", serif';
+  const ease = (x) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 3);
+  const fade = (a, b, x) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+  // 逐字飛入：每個字從放大、透明縮回原位
+  function letters(text, cx, cy, size, font, color, t, t0, stagger, glowCol) {
+    ctx.font = font.replace('{s}', size);
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const chars = [...text];
+    const widths = chars.map((c) => ctx.measureText(c).width);
+    const sp = size * 0.06;
+    const total = widths.reduce((a, b) => a + b, 0) + sp * (chars.length - 1);
+    let x = cx - total / 2;
+    chars.forEach((c, i) => {
+      const k = ease((t - t0 - i * stagger) / 0.35);
+      if (k > 0) {
+        ctx.save();
+        ctx.globalAlpha *= k;
+        ctx.translate(x + widths[i] / 2, cy - (1 - k) * size * 0.4);
+        const sc = 1 + (1 - k) * 1.2;
+        ctx.scale(sc, sc);
+        ctx.shadowColor = glowCol; ctx.shadowBlur = size * (0.4 + (1 - k));
+        ctx.fillStyle = color;
+        ctx.fillText(c, -widths[i] / 2, 0);
+        ctx.restore();
+      }
+      x += widths[i] + sp;
+    });
+  }
   function drawTransition() {
     const t = tr.t;
     const cx = bx + cell * 5, cy = by + cell * 8.5;
-    const env = Math.min(1, t / 0.3) * Math.min(1, (TR_LEN - t) / 0.4);
-    ctx.fillStyle = `rgba(0,0,8,${0.55 * env})`;
+    const W = cell * 10, Hh = cell * VIS;
+    // 背景壓暗：超空間時最暗
+    const dim = Math.min(1, t / 0.3) * Math.min(1, (TR_LEN - t) / 0.5) * (t < TR_WARP ? 0.5 : t < TR_ARRIVE ? 0.5 + 0.4 * fade(TR_WARP, TR_ARRIVE, t) : 0.45);
+    ctx.fillStyle = `rgba(0,0,8,${dim})`;
     ctx.fillRect(0, 0, vw, vh);
-    const fade = (a, b, x) => Math.max(0, Math.min(1, (x - a) / (b - a)));
-    // 1. 過關成績
-    const a1 = fade(0.05, 0.3, t) * (1 - fade(1.0, 1.25, t));
-    if (a1 > 0) {
-      ctx.save(); ctx.globalAlpha = a1;
-      const sc = 1.25 - 0.25 * fade(0.05, 0.35, t);
-      ctx.translate(cx, cy - cell * 1.2); ctx.scale(sc, sc);
-      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell;
-      label(`LEVEL ${tr.level - 1} CLEAR`, 0, 0, cell * 1.15, '#fff', 'center', 800);
-      ctx.restore();
-      ctx.save(); ctx.globalAlpha = a1 * fade(0.25, 0.5, t);
-      const rows = [[`消除 ${tr.lines} 行`, `+${tr.score.toLocaleString()} 分`], [`用時 ${tr.time}`, `最大連擊 ${Math.max(0, tr.combo)}`]];
-      rows.forEach(([l, r], i) => {
-        label(l, cx - cell * 0.4, cy + cell * (0.6 + i * 1.1), cell * 0.62, 'rgba(220,228,255,0.9)', 'right', 600);
-        label(r, cx + cell * 0.4, cy + cell * (0.6 + i * 1.1), cell * 0.62, 'rgba(220,228,255,0.9)', 'left', 600);
-      });
-      ctx.restore();
-    }
-    // 2. 新場景標題
-    const a2 = fade(1.2, 1.6, t) * (1 - fade(2.75, 3.0, t));
-    if (a2 > 0) {
-      const th = THEMES[tr.to];
-      ctx.save(); ctx.globalAlpha = a2;
-      label(`STAGE ${tr.level}`, cx, cy - cell * 2.6, cell * 0.55, rgb(accent), 'center', 700);
-      const k = fade(1.2, 2.2, t);
+    // 1. 光帶掃過場地
+    if (t < 0.9) {
+      const k = t / 0.9;
       ctx.save();
-      ctx.translate(cx, cy - cell * 0.6);
-      ctx.scale(1.12 - 0.12 * k, 1.12 - 0.12 * k);
-      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell * 1.2;
-      const size = th.name.length > 2 ? cell * 1.9 : cell * 2.6;
-      ctx.font = `700 ${size}px ${SERIF}`;
-      if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(cell * 0.35 * (1 - k * 0.5))}px`;
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(th.name, 0, 0);
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-      ctx.restore();
-      const lw = cell * 7 * fade(1.4, 2.0, t);
-      const gr = ctx.createLinearGradient(cx - lw / 2, 0, cx + lw / 2, 0);
-      gr.addColorStop(0, rgb(accent, 0)); gr.addColorStop(0.5, rgb(accent, 0.9)); gr.addColorStop(1, rgb(accent, 0));
-      ctx.fillStyle = gr; ctx.fillRect(cx - lw / 2, cy + cell * 0.9, lw, 2);
-      ctx.globalAlpha = a2 * fade(1.6, 2.1, t);
-      ctx.font = `500 ${cell * 0.7}px ${SERIF}`;
-      ctx.fillStyle = 'rgba(235,238,255,0.92)';
-      ctx.fillText(th.sub, cx, cy + cell * 1.8);
+      ctx.beginPath(); ctx.rect(bx, by, W, Hh); ctx.clip();
+      ctx.globalCompositeOperation = 'lighter';
+      const y = by + Hh * (1.2 - k * 1.6);
+      const gr = ctx.createLinearGradient(0, y - cell * 3, 0, y + cell * 3);
+      gr.addColorStop(0, rgb(accent, 0)); gr.addColorStop(0.5, `rgba(255,255,255,${0.55 * (1 - k * 0.5)})`); gr.addColorStop(1, rgb(accent, 0));
+      ctx.fillStyle = gr; ctx.fillRect(bx, y - cell * 3, W, cell * 6);
       ctx.restore();
     }
-    // 3. READY
-    const a3 = fade(2.8, 2.95, t) * (1 - fade(3.25, 3.4, t));
+    // 2. LEVEL CLEAR 逐字＋成績
+    const a1 = 1 - fade(TR_WARP, TR_WARP + 0.25, t);
+    if (a1 > 0 && t > 0.1) {
+      ctx.save(); ctx.globalAlpha = a1;
+      letters(`LEVEL ${tr.level - 1} CLEAR`, cx, cy - cell * 1.4, cell * 1.1, '800 {s}px system-ui, sans-serif', '#fff', t, 0.12, 0.035, rgb(accent));
+      const a2 = fade(0.6, 0.9, t);
+      if (a2 > 0) {
+        ctx.globalAlpha = a1 * a2;
+        const rows = [[`消除 ${tr.lines} 行`, `+${tr.score.toLocaleString()} 分`], [`用時 ${tr.time}`, `最大連擊 ${Math.max(0, tr.combo)}`]];
+        rows.forEach(([l, r], i) => {
+          const yy = cy + cell * (0.4 + i * 1.1) + (1 - ease(a2)) * cell * 0.6;
+          label(l, cx - cell * 0.4, yy, cell * 0.62, 'rgba(220,228,255,0.95)', 'right', 600);
+          label(r, cx + cell * 0.4, yy, cell * 0.62, 'rgba(220,228,255,0.95)', 'left', 600);
+        });
+      }
+      ctx.restore();
+    }
+    // 3. 超空間光束
+    if (tr.streaks.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const R = Math.hypot(vw, vh) * 0.6;
+      const scx = bx + cell * 5, scy = by + cell * 10;
+      ctx.lineCap = 'round';
+      for (const st of tr.streaks) {
+        const r0 = st.r * R, r1 = (st.r + 0.05 + st.r * 0.25) * R;
+        const col = st.hue < 0.6 ? `rgba(255,255,255,${Math.min(1, st.r * 2.5)})` : rgb(mix(accent, [255, 255, 255], 0.3), Math.min(1, st.r * 2.5));
+        ctx.strokeStyle = col; ctx.lineWidth = st.w * (0.5 + st.r * 2);
+        ctx.beginPath();
+        ctx.moveTo(scx + Math.cos(st.a) * r0, scy + Math.sin(st.a) * r0);
+        ctx.lineTo(scx + Math.cos(st.a) * r1, scy + Math.sin(st.a) * r1);
+        ctx.stroke();
+      }
+      // 中心光核
+      const k = fade(TR_WARP, TR_ARRIVE, t) * (1 - fade(TR_ARRIVE, TR_ARRIVE + 0.4, t));
+      if (k > 0) {
+        const rg = ctx.createRadialGradient(scx, scy, 0, scx, scy, cell * (2 + k * 6));
+        rg.addColorStop(0, `rgba(255,255,255,${k})`); rg.addColorStop(0.4, rgb(accent, k * 0.6)); rg.addColorStop(1, rgb(accent, 0));
+        ctx.fillStyle = rg; ctx.fillRect(0, 0, vw, vh);
+      }
+      ctx.restore();
+    }
+    // 4. 光圈邊緣的光環
+    if (t >= TR_ARRIVE && t < TR_ARRIVE + TR_IRIS) {
+      const k = ease((t - TR_ARRIVE) / TR_IRIS);
+      const r = k * Math.hypot(vw, vh);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - k)})`; ctx.lineWidth = cell * 0.5 * (1 - k) + 2;
+      ctx.beginPath(); ctx.arc(bx + cell * 5, by + cell * 10, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    // 5. 新場景標題：旋轉光芒、逐字浮現、副標打字
+    const a3 = fade(3.0, 3.3, t) * (1 - fade(4.85, 5.05, t));
     if (a3 > 0) {
-      ctx.save(); ctx.globalAlpha = a3;
-      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell;
-      label('READY', cx, cy, cell * 1.4, '#fff', 'center', 800);
+      const th = THEMES[tr.to];
+      const ty = cy - cell * 0.5;
+      ctx.save();
+      ctx.globalAlpha = a3;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(cx, ty);
+      ctx.rotate(t * 0.25);
+      for (let i = 0; i < 14; i++) {
+        ctx.rotate(Math.PI * 2 / 14);
+        const gr = ctx.createLinearGradient(0, 0, cell * 9, 0);
+        gr.addColorStop(0, rgb(accent, 0.28)); gr.addColorStop(1, rgb(accent, 0));
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(cell * 9, -cell * 0.5); ctx.lineTo(cell * 9, cell * 0.5); ctx.fill();
+      }
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = a3;
+      label(`STAGE ${tr.level}`, cx, cy - cell * 2.7, cell * 0.55, rgb(accent), 'center', 700);
+      const size = th.name.length > 3 ? cell * 1.6 : th.name.length > 2 ? cell * 1.9 : cell * 2.5;
+      letters(th.name, cx, ty, size, `700 {s}px ${SERIF}`, '#fff', t, 3.1, 0.13, rgb(accent));
+      const lw = cell * 8 * ease((t - 3.4) / 0.6);
+      if (lw > 0) {
+        const gr = ctx.createLinearGradient(cx - lw / 2, 0, cx + lw / 2, 0);
+        gr.addColorStop(0, rgb(accent, 0)); gr.addColorStop(0.5, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, rgb(accent, 0));
+        ctx.fillStyle = gr; ctx.fillRect(cx - lw / 2, ty + size * 0.75, lw, 2);
+      }
+      const nChars = Math.max(0, Math.floor((t - 3.7) / 0.07));
+      if (nChars > 0) {
+        const sub = [...th.sub].slice(0, nChars).join('');
+        ctx.font = `500 ${cell * 0.68}px ${SERIF}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell * 0.4;
+        ctx.fillStyle = 'rgba(240,242,255,0.95)';
+        ctx.fillText(sub, cx, ty + size * 0.75 + cell * 1.1);
+      }
+      ctx.restore();
+    }
+    // 6. READY → GO!
+    if (t >= 5.0 && t < TR_LEN) {
+      const isGo = t >= 5.45;
+      const k = isGo ? (t - 5.45) / (TR_LEN - 5.45) : (t - 5.0) / 0.45;
+      ctx.save();
+      ctx.globalAlpha = isGo ? 1 - k * k : Math.min(1, k * 3);
+      const sc = isGo ? 1 + k * 0.8 : 1.3 - ease(k) * 0.3;
+      ctx.translate(cx, cy); ctx.scale(sc, sc);
+      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell * 1.2;
+      label(isGo ? 'GO!' : 'READY', 0, 0, cell * (isGo ? 2 : 1.4), isGo ? '#fff6c0' : '#fff', 'center', 900);
       ctx.restore();
     }
   }
@@ -648,7 +861,14 @@
   let intensity = 0;
   function drawBackground(t) {
     const B = boardInfo();
-    if (prevScene && sceneFade < 1) {
+    if (tr && tr.prev && tr.t >= TR_ARRIVE) {
+      tr.prev.draw(ctx, t, beat, B);
+      const r = ease((tr.t - TR_ARRIVE) / TR_IRIS) * Math.hypot(vw, vh);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(B.cx, B.cy, Math.max(1, r), 0, Math.PI * 2); ctx.clip();
+      scene.draw(ctx, t, beat, B);
+      ctx.restore();
+    } else if (prevScene && sceneFade < 1) {
       prevScene.draw(ctx, t, beat, B);
       ctx.globalAlpha = sceneFade;
       scene.draw(ctx, t, beat, B);
@@ -915,6 +1135,7 @@
     updateTheme(dt);
     if (scene) { if (scene.setIntensity) scene.setIntensity(game ? intensity : 1); scene.update(dt); }
     if (prevScene) prevScene.update(dt);
+    if (tr && tr.prev) tr.prev.update(dt);
     updateFx(dt);
     render(ts);
     // 效能保護：遊玩中連續 3 秒平均低於約 40fps，就自動關閉光暈後製
@@ -982,6 +1203,20 @@
     mkSlider('音效音量', 'sfx', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSeg('難度曲線（下一局生效）', 'difficulty', [['relaxed', '輕鬆'], ['normal', '標準'], ['classic', '經典']]);
     mkSeg('過關過場', 'transitions', [[true, '開'], [false, '關']]);
+    {
+      const row = document.createElement('div'); row.className = 'set-row';
+      const lab = document.createElement('label'); lab.append('按鍵位置');
+      const seg = document.createElement('div'); seg.className = 'seg';
+      const b1 = document.createElement('button'); b1.textContent = '自訂按鍵位置';
+      b1.addEventListener('click', () => { Snd.play('ui'); openPadEditor(); });
+      seg.append(b1);
+      if (settings.customPad) {
+        const b2 = document.createElement('button'); b2.textContent = '恢復預設位置';
+        b2.addEventListener('click', () => { settings.customPad = null; applySettings(); buildSettings(); });
+        seg.append(b2);
+      }
+      row.append(lab, seg); body.append(row);
+    }
     mkSlider('按鍵大小', 'btnScale', 0.7, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSlider('起始等級', 'startLevel', 1, THEMES.length, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
@@ -1034,6 +1269,13 @@
 
   // ================= 事件綁定 =================
   function ui(fn) { return () => { ensureAudio(); Snd.play('ui'); fn(); }; }
+  $('pe-smaller').addEventListener('click', () => resizeSel(0.9));
+  $('pe-bigger').addEventListener('click', () => resizeSel(1.1));
+  $('pe-reset').addEventListener('click', () => {
+    settings.customPad = null; applyCustomPad();
+    settings.customPad = capturePad(); applyCustomPad();
+  });
+  $('pe-done').addEventListener('click', () => { Snd.play('ui'); closePadEditor(); });
   $('btn-start').addEventListener('click', ui(startGame));
   $('btn-settings').addEventListener('click', ui(() => { settingsReturn = 'menu'; buildSettings(); showOverlay('settings'); }));
   $('btn-pause-settings').addEventListener('click', ui(() => { settingsReturn = 'pause'; buildSettings(); showOverlay('settings'); }));

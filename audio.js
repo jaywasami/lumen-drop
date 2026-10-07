@@ -214,6 +214,50 @@
         [[0, 9, 4], [4, 8, 4], [8, 7, 8], [16, 8, 4], [20, 6, 4], [24, 5, 8]],
       ],
     },
+    {
+      name: '土星環', bpm: 108, root: 62, scale: 'lydian', prog: [0, 1, 4, 5], sevenths: true,
+      pad: 'glass', arp: 'pluck', bass: 'sub', lead: 'soft', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.2,
+      arpSeq: [0, 2, 4, 6, 4, 2, 1, 3, 0, 2, 4, 7, 6, 4, 2, 1],
+      bassSeq: 'R---R---R---5-O-',
+      drums: { kick: 'x.....x...x.....', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', ohat: '..x...x...x...x.' },
+      leadSeq: [
+        [[0, 4, 4], [4, 6, 2], [6, 7, 2], [8, 8, 8], [16, 7, 4], [20, 6, 4], [24, 4, 8]],
+        [[0, 9, 4], [4, 8, 2], [6, 7, 2], [8, 6, 8], [16, 4, 4], [20, 5, 4], [24, 4, 8]],
+      ],
+    },
+    {
+      name: '楓紅', bpm: 82, root: 60, scale: 'gong', prog: [0, 3, 1, 4], sevenths: false, gong: true, epic: 'eastern', vol: 0.85,
+      pad: 'warm', arp: 'zheng', bass: 'round', lead: 'xiao', arpOct: 0, bassOct: -2, leadOct: 0, wet: 1.3,
+      arpSeq: [0, 1, 2, -1, 3, -1, 2, 1, 0, 1, 2, -1, 4, -1, 3, 2],
+      bassSeq: 'R-------5-------',
+      drums: { woodblock: '....x.......x...', tanggu: 'x.......x.......' },
+      leadSeq: [
+        [[0, 7, 6], [6, 6, 2], [8, 5, 8], [16, 4, 4], [20, 5, 4], [24, 3, 8]],
+        [[0, 8, 4], [4, 7, 4], [8, 9, 6], [14, 8, 2], [16, 7, 8], [24, 5, 8]],
+      ],
+    },
+    {
+      name: '海上風暴', bpm: 126, root: 50, scale: 'minor', prog: [0, 5, 3, 4], sevenths: false, rain: true, vol: 0.85,
+      pad: 'saw', arp: 'pluck', bass: 'saw', lead: 'saw', arpOct: 1, bassOct: -1, leadOct: 1, wet: 1.0,
+      arpSeq: [0, 1, 2, 0, 1, 2, 0, 1, 2, 3, 4, 2, 3, 4, 5, 4],
+      bassSeq: 'R-RR-R-RR-R-R-O-',
+      drums: { kick: 'x..x..x...x..x..', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', tom: '............xxxx' },
+      leadSeq: [
+        [[0, 4, 6], [6, 3, 2], [8, 2, 4], [12, 4, 4], [16, 5, 6], [22, 4, 2], [24, 2, 8]],
+        [[0, 7, 4], [4, 6, 4], [8, 5, 4], [12, 4, 4], [16, 3, 6], [22, 2, 2], [24, 0, 8]],
+      ],
+    },
+    {
+      name: '飛龍', bpm: 124, root: 57, scale: 'zhi', prog: [0, 3, 4, 1], sevenths: false, gong: true, epic: 'eastern', vol: 0.8,
+      pad: 'choir', arp: 'pipa', bass: 'round', lead: 'suona', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.0,
+      arpSeq: [0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 2, 3, 5, 4, 3, 2],
+      bassSeq: 'R-R-R-5-R-R-O-5-',
+      drums: { tanggu: 'x..x..x.x..x..x.', woodblock: '..x...x...x...x.', cymbal: '....x.......x...' },
+      leadSeq: [
+        [[0, 5, 3], [3, 6, 1], [4, 7, 4], [8, 8, 2], [10, 7, 2], [12, 5, 4], [16, 6, 6], [22, 5, 2], [24, 4, 8]],
+        [[0, 8, 2], [2, 9, 2], [4, 10, 4], [8, 9, 4], [12, 8, 4], [16, 7, 4], [20, 5, 4], [24, 5, 8]],
+      ],
+    },
   ];
 
   function degToMidi(song, deg, oct) {
@@ -899,6 +943,24 @@
         case 'gameOver':
           [0, -2, -5, -9].forEach((iv, i) => this.synth({ t: now + 0.3 + i * 0.32, f: mtof(69 + iv), waves: [['triangle', 0, 0.8], ['sine', 0, 0.3, 2]], d: 1.4, peak: 0.09, out, wet: 0.8 }));
           this.pad(now + 1.4, [45, 52, 57, 60], 2.5, 'warm', out, 1.2);
+          break;
+        case 'warp':
+          // 進入超空間：1.4 秒的升騰音 + 低頻漸強
+          this.riser(now, now + 1.4);
+          this.synth({ t: now, f: 40, pitchFrom: 0.5, glide: 1.3, waves: [['sawtooth', 0, 0.5], ['sine', 0, 1]], cut: 300, cutEnv: 0.3, cutTime: 1.3, a: 1.2, s: 1, dur: 1.3, r: 0.1, peak: 0.12, out, wet: 0.3 });
+          for (let i = 0; i < 8; i++) this.synth({ t: now + i * 0.16, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.7], ['sine', 0, 0.2, 2]], d: 0.5, peak: 0.04 + i * 0.006, out, wet: 0.7 });
+          break;
+        case 'arrive':
+          // 抵達新場景：大鼓轟鳴 + 鈸 + 和弦光芒
+          this.drum('taikoBig', now, 1.3, out);
+          this.drum('timpani', now, 1, out);
+          this.drum('crash', now, 1.4, out);
+          this.synth({ t: now, f: 36, pitchFrom: 2.2, glide: 0.4, waves: [['sine', 0, 1]], d: 1.4, peak: 0.6, out });
+          [0, 2, 4, 7, 9].forEach((i) => this.synth({ t: now + 0.05, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.6], ['triangle', 0, 0.2, 2]], d: 2.2, peak: 0.06, out, wet: 0.8 }));
+          break;
+        case 'goShout':
+          [76, 79, 83, 88].forEach((m, i) => this.synth({ t: now + i * 0.04, f: mtof(m), waves: [['sawtooth', -6, 0.3], ['sawtooth', 6, 0.3]], cut: 3000, d: 0.5, peak: 0.05, out, wet: 0.5 }));
+          this.drum('kick', now, 1, out);
           break;
         case 'count':
           this.synth({ t: now, f: mtof(74), waves: [['sine', 0, 0.8], ['sine', 0, 0.2, 2]], d: 0.35, peak: 0.1, out, wet: 0.5 });
