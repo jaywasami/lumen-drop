@@ -736,7 +736,9 @@
       tot: { atk: 0, lines: 0, pieces: 0, time: 0 },
     }, o);
   }
+  const forgetHostRoom = () => { try { sessionStorage.removeItem('lumen.hostRoom'); } catch (_) { /* ignore */ } };
   function cleanupVs() {
+    forgetHostRoom();
     if (!vs) return;
     const v = vs;
     vs = null;
@@ -809,9 +811,15 @@
         else if (mode === 'vsdone') $('vr-note').textContent = msg;
       },
       unstable: () => { if (vs === my) my.lagging = true; },
+      revived: () => { if (vs === my && mode === 'menu' && !my.oppName) roomStatus('房間已恢復，等待對手加入…'); },
+      retry: (n, why) => {
+        if (vs !== my || mode !== 'menu') return;
+        roomStatus(why === 'peer-unavailable' ? `還找不到房間，持續嘗試中（第 ${n} 次）…\n請房主回到遊戲的房間畫面` : `連線中，持續嘗試（第 ${n} 次）…`);
+      },
     };
   }
-  async function createRoom() {
+  async function createRoom(preferred) {
+    if (typeof preferred !== 'string') preferred = null;
     if (!needName()) return;
     cleanupVs();
     const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
@@ -819,10 +827,11 @@
     showOverlay('room'); updateRoom(); roomStatus('正在建立房間…');
     my.net = new window.LumenNet.Net(netHandlers(my));
     try {
-      const code = await my.net.host();
+      const code = await my.net.host(preferred);
       if (vs !== my) { my.net.close(); return; }
       my.code = code;
-      roomStatus('把房號或邀請連結傳給朋友');
+      try { sessionStorage.setItem('lumen.hostRoom', JSON.stringify({ code, t: Date.now() })); } catch (_) { /* ignore */ }
+      roomStatus('把房號或邀請連結傳給朋友，傳完請回到這個畫面等待');
       updateRoom();
     } catch (e) { if (vs === my) roomStatus((e && e.message) || '建立房間失敗', true); }
   }
@@ -925,6 +934,7 @@
 
   // ---------- 比賽流程 ----------
   function beginMatch() {
+    forgetHostRoom();
     vs.wins = [0, 0]; vs.tot = { atk: 0, lines: 0, pieces: 0, time: 0 };
     vs.matchOver = false; vs.started = true; vs.myReady = vs.oppReady = false;
     hostStartRound(1);
@@ -1921,6 +1931,7 @@
       releaseWake();
     } else {
       if (audioStarted) Snd.resume();
+      if (vs && vs.net && vs.net.keepAlive) vs.net.keepAlive(); // 從 LINE 切回來：立刻檢查房間是否還在
       if (mode === 'playing' || mode === 'countdown' || mode === 'paused') requestWake();
     }
   });
@@ -1945,11 +1956,17 @@
   {
     const q = new URLSearchParams(location.search);
     const code = (q.get('room') || '').replace(/\D/g, '');
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem('lumen.hostRoom') || 'null'); } catch (_) { /* ignore */ }
     if (code.length === 4) {
       openVersus();
       $('vs-code').value = code;
       q.delete('room');
       try { history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '')); } catch (_) { /* ignore */ }
+    } else if (saved && saved.code && Date.now() - saved.t < 20 * 60 * 1000 && (settings.name || '').trim()) {
+      // 房主切到別的 App 時手機把網頁關掉重載：自動用原來的房號重開房間
+      openVersus();
+      createRoom(String(saved.code));
     }
   }
 
