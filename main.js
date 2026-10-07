@@ -1,17 +1,18 @@
 'use strict';
-/* 光律方塊 — 介面、渲染、特效、設定 */
+/* 光律方塊 — 介面、渲染、特效、場景、設定 */
 (function () {
   const E = window.Engine;
   const Snd = window.LumenAudio;
+  const SCENES = window.LumenScenes;
   const { Input, ACTIONS, DEFAULT_KEYS, ACTION_LABEL } = window.LumenInput;
-  const { W, H, HIDDEN, VIS, SHAPES, TYPE_ID } = E;
+  const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, ghost: true, fx: 'high',
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -44,11 +45,13 @@
   let mode = 'menu'; // menu | countdown | playing | paused | over
   let game = null;
   let countdown = 0;
+  let lastCount = 4;
   let overDelay = 0;
   let overFade = 0;
   let overShown = false;
   let settingsReturn = 'menu';
   let wakeLock = null;
+  let audioStarted = false;
 
   const input = new Input({
     getGame: () => (mode === 'playing' ? game : null),
@@ -65,26 +68,66 @@
     if (ms) navigator.vibrate(ms);
   }
 
-  // ================= 主題 =================
+  // 第一次互動才能啟動音訊（瀏覽器規定）
+  function ensureAudio() {
+    Snd.resume();
+    Snd.setMusicVolume(settings.music);
+    Snd.setSfxVolume(settings.sfx);
+    if (!audioStarted) {
+      audioStarted = true;
+      if (mode === 'menu') Snd.playSong(0, 0);
+    }
+  }
+  window.addEventListener('pointerdown', ensureAudio, { capture: true });
+  window.addEventListener('keydown', ensureAudio, { capture: true });
+
+  // ================= 主題 / 場景 =================
   const THEMES = [
-    { name: '星空', top: [8, 10, 40], bot: [34, 14, 78], accent: [122, 167, 255], star: [200, 215, 255] },
-    { name: '深海', top: [2, 22, 48], bot: [0, 78, 96], accent: [77, 232, 255], star: [170, 255, 255] },
-    { name: '極光', top: [4, 14, 30], bot: [18, 64, 62], accent: [109, 255, 176], star: [200, 255, 230] },
-    { name: '霓虹都市', top: [22, 4, 42], bot: [78, 10, 84], accent: [255, 93, 230], star: [255, 190, 255] },
-    { name: '櫻花', top: [42, 14, 42], bot: [96, 30, 72], accent: [255, 166, 216], star: [255, 220, 240] },
-    { name: '夕陽', top: [42, 12, 40], bot: [118, 42, 42], accent: [255, 179, 107], star: [255, 230, 190] },
+    { name: '星空', accent: [122, 167, 255], style: 'gem' },
+    { name: '深海', accent: [77, 232, 255], style: 'glass' },
+    { name: '極光', accent: [109, 255, 176], style: 'glass' },
+    { name: '霓虹都市', accent: [255, 93, 230], style: 'neon' },
+    { name: '櫻花', accent: [255, 166, 216], style: 'soft' },
+    { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem' },
   ];
-  const themeCur = JSON.parse(JSON.stringify(THEMES[0]));
   let themeIdx = 0;
-  function lerpArr(a, b, k) { for (let i = 0; i < a.length; i++) a[i] += (b[i] - a[i]) * k; }
+  const accent = THEMES[0].accent.slice();
+  const scenes = [];
+  let scene = null;
+  let prevScene = null;
+  let sceneFade = 1;
+
+  function getScene(i) {
+    if (!scenes[i]) {
+      scenes[i] = new SCENES[i](settings.fx === 'low');
+      scenes[i].resize(vw, vh);
+    }
+    return scenes[i];
+  }
+  function setTheme(i, instant) {
+    themeIdx = i;
+    const next = getScene(i);
+    if (next === scene) return;
+    if (instant || !scene) { scene = next; prevScene = null; sceneFade = 1; return; }
+    prevScene = scene; scene = next; sceneFade = 0;
+  }
+  function rebuildScenes() {
+    scenes.length = 0;
+    scene = null; prevScene = null;
+    setTheme(themeIdx, true);
+  }
   function updateTheme(dt) {
-    const target = THEMES[themeIdx];
     const k = Math.min(1, dt / 1000 * 1.6);
-    for (const key of ['top', 'bot', 'accent', 'star']) lerpArr(themeCur[key], target[key], k);
+    const tgt = THEMES[themeIdx].accent;
+    for (let i = 0; i < 3; i++) accent[i] += (tgt[i] - accent[i]) * k;
+    if (sceneFade < 1) {
+      sceneFade = Math.min(1, sceneFade + dt / 2200);
+      if (sceneFade >= 1) prevScene = null;
+    }
   }
   const rgb = (a, al) => (al == null ? `rgb(${a[0] | 0},${a[1] | 0},${a[2] | 0})` : `rgba(${a[0] | 0},${a[1] | 0},${a[2] | 0},${al})`);
 
-  // ================= 方塊精靈 =================
+  // ================= 方塊精靈（依主題換材質） =================
   const COLORS = { I: '#3de9ff', O: '#ffe14d', T: '#c070ff', S: '#5dff8a', Z: '#ff5d6c', J: '#5d8bff', L: '#ffa94d' };
   const ID_TYPE = ['', 'I', 'O', 'T', 'S', 'Z', 'J', 'L'];
   let sprites = {};
@@ -97,36 +140,71 @@
     g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
     g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
   }
-  function makeSprite(type, c, dpr) {
-    const pad = Math.ceil(c * 0.4);
+  function makeSprite(type, c, dpr, style) {
+    const pad = Math.ceil(c * 0.45);
     const size = c + pad * 2;
     const cv = document.createElement('canvas');
     cv.width = cv.height = Math.ceil(size * dpr);
     const g = cv.getContext('2d');
     g.scale(dpr, dpr);
     const col = hex(COLORS[type]);
-    const inset = Math.max(1, c * 0.04);
-    g.shadowColor = rgb(col, 0.9); g.shadowBlur = c * 0.5;
-    g.fillStyle = rgb(col);
-    rr(g, pad + inset, pad + inset, c - inset * 2, c - inset * 2, c * 0.2); g.fill();
-    g.shadowBlur = 0;
-    const grad = g.createLinearGradient(pad, pad, pad + c, pad + c);
-    grad.addColorStop(0, rgb(mix(col, [255, 255, 255], 0.55)));
-    grad.addColorStop(0.45, rgb(col));
-    grad.addColorStop(1, rgb(mix(col, [0, 0, 30], 0.45)));
-    g.fillStyle = grad;
-    rr(g, pad + inset, pad + inset, c - inset * 2, c - inset * 2, c * 0.2); g.fill();
-    // 內側光澤
-    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = Math.max(1, c * 0.06);
-    g.beginPath(); g.moveTo(pad + c * 0.2, pad + c * 0.12); g.lineTo(pad + c * 0.12, pad + c * 0.12); g.lineTo(pad + c * 0.12, pad + c * 0.8); g.stroke();
-    g.fillStyle = 'rgba(255,255,255,0.16)';
-    rr(g, pad + c * 0.2, pad + c * 0.2, c * 0.6, c * 0.6, c * 0.12); g.fill();
+    const inset = Math.max(1, c * 0.045);
+    const x = pad + inset, y = pad + inset, s = c - inset * 2;
+    const rad = c * 0.2;
+    if (style === 'neon') {
+      g.shadowColor = rgb(col); g.shadowBlur = c * 0.6;
+      g.fillStyle = rgb(mix(col, [5, 0, 20], 0.78));
+      rr(g, x, y, s, s, rad); g.fill();
+      g.strokeStyle = rgb(mix(col, [255, 255, 255], 0.25)); g.lineWidth = Math.max(1.5, c * 0.09);
+      rr(g, x + 1, y + 1, s - 2, s - 2, rad); g.stroke();
+      g.shadowBlur = c * 0.3;
+      g.fillStyle = rgb(col, 0.85);
+      rr(g, pad + c * 0.36, pad + c * 0.36, c * 0.28, c * 0.28, c * 0.06); g.fill();
+    } else if (style === 'glass') {
+      g.shadowColor = rgb(col, 0.9); g.shadowBlur = c * 0.4;
+      g.fillStyle = rgb(col, 0.42);
+      rr(g, x, y, s, s, rad); g.fill();
+      g.shadowBlur = 0;
+      const gr = g.createLinearGradient(x, y, x, y + s);
+      gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.08)'); gr.addColorStop(1, rgb(col, 0.25));
+      g.fillStyle = gr; rr(g, x, y, s, s, rad); g.fill();
+      g.strokeStyle = rgb(mix(col, [255, 255, 255], 0.5), 0.95); g.lineWidth = Math.max(1, c * 0.06);
+      rr(g, x + 0.5, y + 0.5, s - 1, s - 1, rad); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.7)';
+      g.beginPath(); g.ellipse(x + s * 0.3, y + s * 0.22, s * 0.18, s * 0.08, -0.5, 0, Math.PI * 2); g.fill();
+    } else if (style === 'soft') {
+      const pc = mix(col, [255, 240, 248], 0.38);
+      g.shadowColor = rgb(pc, 0.8); g.shadowBlur = c * 0.35;
+      g.fillStyle = rgb(pc);
+      rr(g, x, y, s, s, c * 0.3); g.fill();
+      g.shadowBlur = 0;
+      const gr = g.createRadialGradient(x + s * 0.35, y + s * 0.3, 0, x + s * 0.5, y + s * 0.5, s * 0.75);
+      gr.addColorStop(0, 'rgba(255,255,255,0.65)'); gr.addColorStop(1, rgb(mix(col, [120, 40, 90], 0.25), 0.3));
+      g.fillStyle = gr; rr(g, x, y, s, s, c * 0.3); g.fill();
+    } else {
+      g.shadowColor = rgb(col, 0.9); g.shadowBlur = c * 0.5;
+      g.fillStyle = rgb(col);
+      rr(g, x, y, s, s, rad); g.fill();
+      g.shadowBlur = 0;
+      const grad = g.createLinearGradient(pad, pad, pad + c, pad + c);
+      grad.addColorStop(0, rgb(mix(col, [255, 255, 255], 0.55)));
+      grad.addColorStop(0.45, rgb(col));
+      grad.addColorStop(1, rgb(mix(col, [0, 0, 30], 0.45)));
+      g.fillStyle = grad;
+      rr(g, x, y, s, s, rad); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = Math.max(1, c * 0.06);
+      g.beginPath(); g.moveTo(pad + c * 0.2, pad + c * 0.12); g.lineTo(pad + c * 0.12, pad + c * 0.12); g.lineTo(pad + c * 0.12, pad + c * 0.8); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.16)';
+      rr(g, pad + c * 0.2, pad + c * 0.2, c * 0.6, c * 0.6, c * 0.12); g.fill();
+    }
     return { cv, pad, c, size };
   }
   function getSprite(type) {
+    const style = THEMES[themeIdx].style;
     const key = `${Math.round(cell * dpr)}`;
     if (key !== spriteKey) { sprites = {}; spriteKey = key; }
-    return sprites[type] || (sprites[type] = makeSprite(type, cell, dpr));
+    const k = style + type;
+    return sprites[k] || (sprites[k] = makeSprite(type, cell, dpr, style));
   }
   function drawCell(type, x, y, size, alpha) {
     const sp = getSprite(type);
@@ -139,16 +217,16 @@
   // ================= 版面 =================
   let dpr = 1, vw = 0, vh = 0, cell = 24, bx = 0, by = 0, sideW = 0, gap = 0, portrait = true;
   function layout() {
+    const pw = vw, ph = vh;
     vw = window.innerWidth; vh = window.innerHeight;
-    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
     portrait = vh > vw * 1.05;
     const buttons = settings.controls === 'buttons';
     if (portrait) {
       const reserve = buttons ? Math.min(Math.max(vh * 0.31, 175), 275) : 12;
       const top = 10;
-      cell = Math.min((vw - 14) / 17.2, (vh - reserve - top - 6) / 20);
-      cell = Math.floor(cell);
+      cell = Math.floor(Math.min((vw - 14) / 17.2, (vh - reserve - top - 6) / 20));
       const avail = vh - reserve - top;
       by = top + Math.max(0, (avail - cell * 20) * 0.5);
     } else {
@@ -159,7 +237,6 @@
     const totalW = sideW * 2 + gap * 2 + cell * 10;
     bx = (vw - totalW) / 2 + sideW + gap;
     input.cellPx = cell;
-    // 暫停鈕放在左欄下方
     const lx = bx - gap - sideW;
     pauseBtn.style.left = `${lx}px`;
     pauseBtn.style.top = `${by + cell * 11.6}px`;
@@ -167,16 +244,12 @@
     pauseBtn.style.height = `${cell * 1.7}px`;
     pauseBtn.style.fontSize = `${Math.max(11, cell * 0.55)}px`;
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
+    if (pw !== vw || ph !== vh) for (const s of scenes) if (s) s.resize(vw, vh);
   }
+  function boardInfo() { return { x: bx, y: by, w: cell * 10, h: cell * VIS, c: cell, cx: bx + cell * 5, cy: by + cell * 10 }; }
 
   // ================= 特效 =================
   const fx = { particles: [], flashes: [], rings: [], streaks: [], popups: [], lockFlash: [], shake: 0, pulse: 0 };
-  const stars = [];
-  function initStars() {
-    stars.length = 0;
-    const n = settings.fx === 'low' ? 50 : 130;
-    for (let i = 0; i < n; i++) stars.push({ x: Math.random(), y: Math.random(), z: 0.2 + Math.random() * 0.8, tw: Math.random() * 6.28 });
-  }
   const maxParticles = () => (settings.fx === 'low' ? 140 : 480);
   function addParticle(p) { if (fx.particles.length < maxParticles()) fx.particles.push(p); }
   function burst(x, y, color, n, speed, life, gravity) {
@@ -204,6 +277,7 @@
 
   // ================= 遊戲事件 =================
   let lastWasHardDrop = false;
+  const musicStage = () => (game ? Math.min(4, Math.floor((game.lines % 10) / 2)) : 0);
   function onGameEvent(type, d) {
     switch (type) {
       case 'move': Snd.play('move'); break;
@@ -236,7 +310,9 @@
       }
       case 'clear': {
         const n = d.lines;
+        if (n === 0) break;
         Snd.play('clear', d);
+        Snd.setStage(musicStage());
         for (const row of d.rows) {
           fx.flashes.push({ y: row.y, t: 0, life: 0.42 });
           for (let x = 0; x < W; x++) {
@@ -246,6 +322,7 @@
             burst(px + cell / 2, py + cell / 2, COLORS[t], settings.fx === 'low' ? 1 : 3, cell * (n >= 4 ? 14 : 8), 0.7, cell * 8);
           }
         }
+        if (scene) scene.burst(Object.assign({}, d, { rows: d.rows.map((r) => ({ vy: r.y - HIDDEN })) }), boardInfo());
         const names = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS'];
         const lines = [];
         if (d.tspin) lines.push('T-SPIN' + (d.mini ? ' MINI' : '') + (n ? ' ' + names[n] : ''));
@@ -260,14 +337,20 @@
         else if (n >= 2) fx.rings.push({ t: 0, life: 0.6, small: true });
         break;
       }
-      case 'levelUp':
+      case 'levelUp': {
+        const idx = (d.level - 1) % THEMES.length;
+        if (idx !== themeIdx) {
+          setTheme(idx);
+          Snd.playSong(idx, 0);
+        }
         Snd.play('levelUp');
-        themeIdx = (d.level - 1) % THEMES.length;
-        popup([`LEVEL ${d.level}`, THEMES[themeIdx].name], '#8be9ff');
+        popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
         fx.rings.push({ t: 0, life: 1.1 });
         fx.pulse = 1;
         break;
+      }
       case 'gameOver':
+        Snd.stopMusic(2);
         Snd.play('gameOver');
         mode = 'over'; overDelay = 1.1; overFade = 0; overShown = false;
         input.releaseAll();
@@ -278,30 +361,36 @@
 
   // ================= 遊戲流程 =================
   function startGame() {
-    Snd.resume();
+    ensureAudio();
     input.releaseAll();
-    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf }, onEvent: onGameEvent });
+    const lv = Math.max(1, Math.min(15, settings.startLevel | 0));
+    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv }, onEvent: onGameEvent });
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
-    fx.shake = 0; fx.pulse = 0; overFade = 0; lastWasHardDrop = false;
-    themeIdx = 0;
+    fx.shake = 0; fx.pulse = 0; overFade = 0; overShown = false; lastWasHardDrop = false;
+    const idx = (lv - 1) % THEMES.length;
+    setTheme(idx);
+    Snd.setMuffled(false);
+    Snd.playSong(idx, 0);
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
     showOverlay(null);
     touchEl.classList.toggle('hidden', settings.controls === 'off');
     requestWake();
   }
-  let lastCount = 4;
   function pauseGame() {
     if (mode !== 'playing') return;
-    mode = 'paused'; input.releaseAll(); showOverlay('pause'); Snd.play('ui');
+    mode = 'paused'; input.releaseAll(); showOverlay('pause'); Snd.setMuffled(true); Snd.play('ui');
   }
   function resumeGame() {
     if (mode !== 'paused') return;
-    mode = 'playing'; showOverlay(null); Snd.play('ui');
+    mode = 'playing'; showOverlay(null); Snd.setMuffled(false); Snd.play('ui');
   }
   function toMenu() {
     mode = 'menu'; input.releaseAll(); game = null; showOverlay('menu');
     touchEl.classList.add('hidden');
     $('best-score').textContent = getBest().toLocaleString();
+    setTheme(0);
+    Snd.setMuffled(false);
+    if (audioStarted) Snd.playSong(0, 0);
     releaseWake();
   }
   function finishGame() {
@@ -326,56 +415,41 @@
   function releaseWake() { try { if (wakeLock) wakeLock.release(); } catch (_) { /* ignore */ } wakeLock = null; }
 
   // ================= 繪圖 =================
-  function drawBackground(t, dt) {
-    const g = ctx;
-    const grad = g.createLinearGradient(0, 0, 0, vh);
-    const boost = fx.pulse * 0.25;
-    grad.addColorStop(0, rgb(mix(themeCur.top, [255, 255, 255], boost * 0.3)));
-    grad.addColorStop(1, rgb(mix(themeCur.bot, [255, 255, 255], boost * 0.4)));
-    g.fillStyle = grad; g.fillRect(0, 0, vw, vh);
-    // 場地後方光暈
-    const cx = bx + cell * 5, cy = by + cell * 10;
-    const rad = cell * (14 + fx.pulse * 5);
-    const rg = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
-    rg.addColorStop(0, rgb(themeCur.accent, 0.22 + fx.pulse * 0.25));
-    rg.addColorStop(1, rgb(themeCur.accent, 0));
-    g.fillStyle = rg; g.fillRect(0, 0, vw, vh);
-    // 星點
-    const speed = 0.012 + (game ? game.level * 0.003 : 0);
-    g.globalCompositeOperation = 'lighter';
-    for (const s of stars) {
-      s.y += speed * s.z * dt / 1000; if (s.y > 1) { s.y -= 1; s.x = Math.random(); }
-      const tw = 0.6 + 0.4 * Math.sin(t / 700 + s.tw);
-      g.fillStyle = rgb(themeCur.star, 0.65 * tw * s.z);
-      const r = s.z * 1.5;
-      g.fillRect(s.x * vw, s.y * vh, r, r);
+  let beat = 0;
+  function drawBackground(t) {
+    const B = boardInfo();
+    if (prevScene && sceneFade < 1) {
+      prevScene.draw(ctx, t, beat, B);
+      ctx.globalAlpha = sceneFade;
+      scene.draw(ctx, t, beat, B);
+      ctx.globalAlpha = 1;
+    } else if (scene) {
+      scene.draw(ctx, t, beat, B);
     }
-    // 飄浮光球
-    if (settings.fx !== 'low') {
-      for (let i = 0; i < 5; i++) {
-        const ox = (Math.sin(t / 5200 + i * 1.9) * 0.5 + 0.5) * vw;
-        const oy = (Math.cos(t / 6800 + i * 2.7) * 0.5 + 0.5) * vh;
-        const r = cell * (3 + (i % 3) * 1.8);
-        const og = g.createRadialGradient(ox, oy, 0, ox, oy, r);
-        og.addColorStop(0, rgb(themeCur.accent, 0.09)); og.addColorStop(1, rgb(themeCur.accent, 0));
-        g.fillStyle = og; g.fillRect(ox - r, oy - r, r * 2, r * 2);
-      }
-    }
-    g.globalCompositeOperation = 'source-over';
+    // 場地後方光暈（隨節拍呼吸）
+    if (!game) return;
+    const cx = B.cx, cy = B.cy;
+    const rad = cell * (13 + fx.pulse * 5 + beat * 1.5);
+    const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    rg.addColorStop(0, rgb(accent, 0.16 + fx.pulse * 0.25 + beat * 0.06));
+    rg.addColorStop(1, rgb(accent, 0));
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = rg; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function drawWell() {
     const g = ctx;
     const x = bx, y = by, w = cell * 10, h = cell * VIS;
-    g.fillStyle = 'rgba(2,4,18,0.62)';
+    g.fillStyle = 'rgba(2,4,18,0.74)';
     g.fillRect(x, y, w, h);
     g.strokeStyle = 'rgba(255,255,255,0.045)'; g.lineWidth = 1;
     g.beginPath();
     for (let i = 1; i < 10; i++) { g.moveTo(x + i * cell, y); g.lineTo(x + i * cell, y + h); }
     for (let j = 1; j < VIS; j++) { g.moveTo(x, y + j * cell); g.lineTo(x + w, y + j * cell); }
     g.stroke();
-    g.shadowColor = rgb(themeCur.accent, 0.9); g.shadowBlur = cell * 0.6;
-    g.strokeStyle = rgb(themeCur.accent, 0.75); g.lineWidth = 2;
+    g.shadowColor = rgb(accent, 0.9); g.shadowBlur = cell * (0.5 + beat * 0.5 + fx.pulse * 0.6);
+    g.strokeStyle = rgb(mix(accent, [255, 255, 255], beat * 0.3), 0.7 + beat * 0.3); g.lineWidth = 2;
     g.strokeRect(x - 1, y - 1, w + 2, h + 2);
     g.shadowBlur = 0;
   }
@@ -395,18 +469,16 @@
     const p = game.cur;
     if (!p) return;
     const type = p.type;
-    // 幽靈
     if (settings.ghost) {
       const gy = game.ghostY();
       const col = hex(COLORS[type]);
       ctx.fillStyle = rgb(col, 0.13); ctx.strokeStyle = rgb(col, 0.65); ctx.lineWidth = 1.5;
       for (const [cx, cy] of SHAPES[type][p.rot]) {
-        const x = bx + (p.x + cx) * cell, y = by + (gy + cy - HIDDEN) * cell;
         if (gy + cy < HIDDEN) continue;
+        const x = bx + (p.x + cx) * cell, y = by + (gy + cy - HIDDEN) * cell;
         rr(ctx, x + 1.5, y + 1.5, cell - 3, cell - 3, cell * 0.18); ctx.fill(); ctx.stroke();
       }
     }
-    // 本體（含平滑下落）
     const grounded = game.grounded();
     const frac = grounded ? 0 : Math.min(game.gAcc, 0.999);
     const lockP = grounded ? Math.min(1, game.lockTimer / game.settings.lockDelay) : 0;
@@ -440,22 +512,19 @@
     const w = ctx.measureText(text).width;
     label(text, x, y, w > maxW ? size * maxW / w : size, color, align, 700);
   }
-
   function panelBox(x, y, w, h) {
-    ctx.fillStyle = 'rgba(2,4,18,0.5)';
+    ctx.fillStyle = 'rgba(2,4,18,0.55)';
     rr(ctx, x, y, w, h, cell * 0.3); ctx.fill();
-    ctx.strokeStyle = rgb(themeCur.accent, 0.28); ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = rgb(accent, 0.3); ctx.lineWidth = 1; ctx.stroke();
   }
 
   function drawHud() {
     const lx = bx - gap - sideW;
     const rx = bx + cell * 10 + gap;
-    const dim = 'rgba(190,200,240,0.7)';
-    // HOLD
+    const dim = 'rgba(200,210,245,0.75)';
     panelBox(lx, by, sideW, cell * 3.2);
     label('HOLD', lx + sideW / 2, by + cell * 0.55, cell * 0.42, dim, 'center');
     if (game.hold) drawPreview(game.hold, lx + sideW / 2, by + cell * 2.05, cell * 0.62, game.canHold ? 1 : 0.35);
-    // 數值
     const stats = [['SCORE', game.score.toLocaleString()], ['LEVEL', String(game.level)], ['LINES', String(game.lines)]];
     stats.forEach(([k, v], i) => {
       const y = by + cell * (3.9 + i * 2.5);
@@ -463,24 +532,20 @@
       label(k, lx + sideW / 2, y + cell * 0.5, cell * 0.38, dim, 'center');
       fitLabel(v, lx + sideW / 2, y + cell * 1.3, sideW - cell * 0.4, cell * 0.85, '#fff', 'center');
     });
-    // NEXT
     panelBox(rx, by, sideW, cell * 12.4);
     label('NEXT', rx + sideW / 2, by + cell * 0.55, cell * 0.42, dim, 'center');
-    const nxt = game.next(5);
-    nxt.forEach((t, i) => {
+    game.next(5).forEach((t, i) => {
       const s = i === 0 ? cell * 0.7 : cell * 0.55;
       const cy = by + cell * (1.9 + (i === 0 ? 0 : 0.5) + i * 2.2);
       drawPreview(t, rx + sideW / 2, cy, s, i === 0 ? 1 : 0.85);
     });
-    // Combo / B2B 標示
     let y = by + cell * 13;
     if (game.combo > 0) { label(`${game.combo} COMBO`, rx + sideW / 2, y + cell * 0.5, cell * 0.55, '#8be9ff', 'center', 800); y += cell * 1.2; }
     if (game.b2b) label('B2B', rx + sideW / 2, y + cell * 0.5, cell * 0.55, '#ffe98a', 'center', 800);
   }
 
-  function drawEffects(t) {
+  function drawEffects() {
     const g = ctx;
-    // 鎖定閃光
     for (const f of fx.lockFlash) {
       const a = 1 - f.t / f.life;
       g.fillStyle = `rgba(255,255,255,${a * 0.55})`;
@@ -491,7 +556,6 @@
       }
     }
     g.globalCompositeOperation = 'lighter';
-    // 硬降殘影
     for (const s of fx.streaks) {
       const a = 1 - s.t / s.life;
       const [px, py0] = cellPos(s.x, s.y0);
@@ -501,7 +565,6 @@
       gr.addColorStop(0, rgb(c, 0)); gr.addColorStop(1, rgb(c, 0.55 * a));
       g.fillStyle = gr; g.fillRect(px + cell * 0.1, py0, cell * 0.8, py1 - py0);
     }
-    // 消行閃光
     for (const f of fx.flashes) {
       const k = f.t / f.life;
       const a = (1 - k) * (1 - k);
@@ -511,23 +574,20 @@
       gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, `rgba(255,255,255,${a})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = gr; g.fillRect(bx - cell * k, y - hh, cell * 10 + cell * 2 * k, hh * 2);
     }
-    // 衝擊波
     for (const r of fx.rings) {
       const k = r.t / r.life;
       const cx = bx + cell * 5, cy = by + cell * 10;
       const rad = cell * (r.small ? 4 : 5) + cell * (r.small ? 10 : 22) * k * (2 - k);
-      g.strokeStyle = rgb(themeCur.accent, (1 - k) * 0.9);
+      g.strokeStyle = rgb(accent, (1 - k) * 0.9);
       g.lineWidth = cell * (r.small ? 0.25 : 0.7) * (1 - k) + 1;
       g.beginPath(); g.arc(cx, cy, rad, 0, 6.283); g.stroke();
     }
-    // 粒子
     for (const p of fx.particles) {
       const a = Math.max(0, p.life / p.max);
       g.fillStyle = rgb(hex(p.color), Math.min(1, a));
       g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     g.globalCompositeOperation = 'source-over';
-    // 文字彈出
     for (const pop of fx.popups) {
       const k = pop.t / pop.life;
       const a = k < 0.12 ? k / 0.12 : Math.max(0, 1 - (k - 0.55) / 0.45);
@@ -536,11 +596,10 @@
       pop.lines.forEach((ln, i) => {
         ctx.save();
         ctx.globalAlpha = a;
-        ctx.translate(cx, cy + i * cell * (i ? 1.0 : 0) + (i ? cell * 0.5 : 0));
+        ctx.translate(cx, cy + (i ? cell * (0.5 + i) : 0));
         ctx.scale(sc, sc);
         ctx.shadowColor = pop.color; ctx.shadowBlur = cell * 0.7;
-        const size = i === 0 ? cell * 1.15 : cell * 0.7;
-        label(ln, 0, 0, size, i === 0 ? pop.color : '#fff', 'center', 800);
+        label(ln, 0, 0, i === 0 ? cell * 1.15 : cell * 0.7, i === 0 ? pop.color : '#fff', 'center', 800);
         ctx.restore();
       });
     }
@@ -554,15 +613,14 @@
     ctx.translate(bx + cell * 5, by + cell * 9);
     ctx.globalAlpha = Math.min(1, frac * 1.6);
     ctx.scale(0.8 + frac * 0.6, 0.8 + frac * 0.6);
-    ctx.shadowColor = rgb(themeCur.accent); ctx.shadowBlur = cell;
+    ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell;
     label(String(Math.max(1, n)), 0, 0, cell * 4, '#fff', 'center', 800);
     ctx.restore();
   }
 
-  function render(t, dt) {
+  function render(t) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, vw, vh);
-    drawBackground(t, dt);
+    drawBackground(t);
     if (!game) return;
     ctx.save();
     if (fx.shake > 0.3) ctx.translate((Math.random() - 0.5) * fx.shake, (Math.random() - 0.5) * fx.shake);
@@ -571,7 +629,7 @@
     ctx.beginPath(); ctx.rect(bx - 2, by - cell * 1.5, cell * 10 + 4, cell * VIS + cell * 1.5 + 4); ctx.clip();
     drawBoard();
     if (mode !== 'countdown') drawPiece();
-    drawEffects(t);
+    drawEffects();
     ctx.restore();
     drawHud();
     if (mode === 'countdown') drawCountdown();
@@ -597,9 +655,13 @@
       overDelay -= dt / 1000;
       if (overDelay <= 0 && !overShown) { overShown = true; finishGame(); }
     }
+    const bi = Snd.beatInfo();
+    beat = bi.playing ? Math.exp(-bi.phase * 5) * (bi.drums ? 1 : 0.55) : 0;
     updateTheme(dt);
+    if (scene) scene.update(dt);
+    if (prevScene) prevScene.update(dt);
     updateFx(dt);
-    render(ts, dt);
+    render(ts);
   }
 
   // ================= 設定介面 =================
@@ -630,7 +692,7 @@
       opts.forEach(([val, text]) => {
         const b = document.createElement('button');
         b.textContent = text; if (settings[key] === val) b.classList.add('on');
-        b.addEventListener('click', () => { settings[key] = val; applySettings(); buildSettings(); });
+        b.addEventListener('click', () => { settings[key] = val; applySettings(key === 'fx'); buildSettings(); });
         seg.append(b);
       });
       row.append(lab, seg); body.append(row);
@@ -638,7 +700,9 @@
     mkSlider('DAS 長按延遲', 'das', 40, 300, 5, (v) => `${v} ms`);
     mkSlider('ARR 連續移動間隔', 'arr', 0, 80, 1, (v) => (v === 0 ? '瞬間' : `${v} ms`));
     mkSlider('軟降速度', 'sdf', 5, 40, 1, (v) => (v >= 40 ? '瞬間' : `${v}×`));
+    mkSlider('音樂音量', 'music', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSlider('音效音量', 'sfx', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
+    mkSlider('起始等級', 'startLevel', 1, 15, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('震動回饋', 'haptics', [[true, '開'], [false, '關']]);
     mkSeg('落點提示', 'ghost', [[true, '開'], [false, '關']]);
@@ -672,25 +736,26 @@
   }
   setInterval(updateGpStatus, 1000);
 
-  function applySettings() {
+  function applySettings(fxChanged) {
     saveSettings();
-    Snd.setVolume(settings.sfx);
+    Snd.setSfxVolume(settings.sfx);
+    Snd.setMusicVolume(settings.music);
     input.settings = settings;
     if (game) { game.settings.das = settings.das; game.settings.arr = settings.arr; game.settings.sdf = settings.sdf; }
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
     if (game && mode !== 'menu') touchEl.classList.toggle('hidden', settings.controls === 'off' || mode === 'over');
-    initStars();
     layout();
+    if (fxChanged) rebuildScenes();
   }
 
   // ================= 事件綁定 =================
-  function ui(fn) { return () => { Snd.resume(); Snd.play('ui'); fn(); }; }
+  function ui(fn) { return () => { ensureAudio(); Snd.play('ui'); fn(); }; }
   $('btn-start').addEventListener('click', ui(startGame));
   $('btn-settings').addEventListener('click', ui(() => { settingsReturn = 'menu'; buildSettings(); showOverlay('settings'); }));
   $('btn-pause-settings').addEventListener('click', ui(() => { settingsReturn = 'pause'; buildSettings(); showOverlay('settings'); }));
   $('btn-settings-back').addEventListener('click', ui(() => { input.rebinding = null; showOverlay(settingsReturn); }));
   $('btn-reset-settings').addEventListener('click', ui(() => {
-    settings = JSON.parse(JSON.stringify(DEFAULTS)); input.settings = settings; applySettings(); buildSettings();
+    settings = JSON.parse(JSON.stringify(DEFAULTS)); input.settings = settings; applySettings(true); buildSettings();
   }));
   $('btn-help').addEventListener('click', ui(() => showOverlay('help')));
   $('btn-help-back').addEventListener('click', ui(() => showOverlay('menu')));
@@ -699,7 +764,7 @@
   $('btn-quit').addEventListener('click', ui(toMenu));
   $('btn-again').addEventListener('click', ui(startGame));
   $('btn-over-quit').addEventListener('click', ui(toMenu));
-  pauseBtn.addEventListener('click', () => { Snd.resume(); pauseGame(); });
+  pauseBtn.addEventListener('click', () => { ensureAudio(); pauseGame(); });
   $('btn-fs').addEventListener('click', ui(async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -710,8 +775,14 @@
     } catch (_) { /* 不支援 */ }
   }));
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { if (mode === 'playing') pauseGame(); releaseWake(); }
-    else if (mode === 'playing' || mode === 'countdown') requestWake();
+    if (document.hidden) {
+      if (mode === 'playing') pauseGame();
+      Snd.suspend();
+      releaseWake();
+    } else {
+      if (audioStarted) Snd.resume();
+      if (mode === 'playing' || mode === 'countdown' || mode === 'paused') requestWake();
+    }
   });
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', () => setTimeout(layout, 100));
@@ -722,12 +793,16 @@
   }
 
   // ================= 啟動 =================
-  Snd.vol = settings.sfx;
+  Snd.musicVol = settings.music;
+  Snd.sfxVol = settings.sfx;
   $('best-score').textContent = getBest().toLocaleString();
-  initStars();
   layout();
+  setTheme(0, true);
   requestAnimationFrame((ts) => { last = ts; frame(ts); });
 
   // 供自動測試使用
-  window.__lumen = { get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings };
+  window.__lumen = {
+    get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings,
+    setTheme: (i) => { setTheme(i, true); }, get themeIdx() { return themeIdx; },
+  };
 })();

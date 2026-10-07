@@ -10,4 +10,5 @@
 - `engine.js` 遊戲核心邏輯（SRS、7-bag、DAS/ARR、鎖定延遲、T-Spin、Combo、B2B…）
 - `input.js` 鍵盤 / 手把 / 螢幕按鍵 / 手勢
 - `main.js` 介面、渲染、特效、設定
-- `audio.js` 即時合成音效
+- `audio.js` 程式作曲的背景音樂（6 首，隨消行逐層疊加）與跟著和弦走的動作音效
+- `scenes.js` 六個動態場景：星空、深海、極光、霓虹都市、櫻花、夕陽雲海
