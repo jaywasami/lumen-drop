@@ -343,6 +343,7 @@
     sfxIdx: 0,
     boost: 0,
     build: false,
+    voiceBudget: 84,
     SONGS,
 
     init() {
@@ -358,21 +359,28 @@
       // 母帶：溫和的膠水壓縮 → 低頻飽滿 / 高頻空氣感 → 防爆音限幅
       const comp = c.createDynamicsCompressor();
       comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 2.5; comp.attack.value = 0.012; comp.release.value = 0.25;
-      const lowShelf = c.createBiquadFilter(); lowShelf.type = 'lowshelf'; lowShelf.frequency.value = 110; lowShelf.gain.value = 2.5;
+      // 手機喇叭放不出 45Hz 以下，這段只會吃掉音量空間、讓喇叭和壓縮器破音 → 直接濾掉
+      const lowShelf = c.createBiquadFilter(); lowShelf.type = 'highpass'; lowShelf.frequency.value = 42; lowShelf.Q.value = 0.7;
+      const hp2 = c.createBiquadFilter(); hp2.type = 'highpass'; hp2.frequency.value = 42; hp2.Q.value = 0.7;
       const air = c.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 9000; air.gain.value = 2;
       const mud = c.createBiquadFilter(); mud.type = 'peaking'; mud.frequency.value = 320; mud.Q.value = 0.9; mud.gain.value = -2.5;
       const limiter = c.createDynamicsCompressor();
-      limiter.threshold.value = -4; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.12;
+      limiter.threshold.value = -6; limiter.knee.value = 4; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.3;
+      // 最後一道柔性削波：萬一還是超過，也是圓滑的飽和而不是數位爆音
+      const soft = c.createWaveShaper();
+      const curve = new Float32Array(2048);
+      for (let i = 0; i < curve.length; i++) { const x = (i / (curve.length - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.15) / Math.tanh(1.15); }
+      soft.curve = curve; soft.oversample = '2x';
       this.master = c.createGain();
-      this.master.gain.value = 0.9;
-      this.masterFilter.connect(comp); comp.connect(lowShelf); lowShelf.connect(mud); mud.connect(air); air.connect(limiter); limiter.connect(this.master); this.master.connect(c.destination);
+      this.master.gain.value = 0.78;
+      this.masterFilter.connect(comp); comp.connect(lowShelf); lowShelf.connect(hp2); hp2.connect(mud); mud.connect(air); air.connect(limiter); limiter.connect(this.master); this.master.connect(soft); soft.connect(c.destination);
 
       // 效果：延遲 + 殘響（音樂與音效共用）
       // 殘響：預延遲 + 立體聲、越後面越暗的空間；延遲：左右來回的乒乓回音
       this.fxIn = c.createGain();
       const pre = c.createDelay(0.1); pre.delayTime.value = 0.022;
       this.reverb = c.createConvolver();
-      this.reverb.buffer = this.makeImpulse(3.2);
+      this.reverb.buffer = this.makeImpulse(2.6);
       const revLo = c.createBiquadFilter(); revLo.type = 'highpass'; revLo.frequency.value = 180; // 殘響不要糊低頻
       this.delay = c.createDelay(2);
       this.delay.delayTime.value = 0.375;
@@ -474,6 +482,19 @@
     synth(o) {
       const c = this.ctx;
       const t = Math.max(o.t, c.currentTime);
+      // 同時發聲數上限：音樂太滿時略過新音符，避免手機音訊執行緒來不及算而爆音（音效不受限）
+      const isMusic = o.out && o.out !== this.sfxOut;
+      const nOsc = (o.waves || [1]).length + (o.vib ? 1 : 0);
+      if (isMusic) {
+        const now = c.currentTime;
+        if (!this.voiceList) this.voiceList = [];
+        if (this.voiceList.length > 64) this.voiceList = this.voiceList.filter((v) => v[0] > now);
+        let active = 0;
+        for (const v of this.voiceList) if (v[0] > now) active += v[1];
+        if (active + nOsc > this.voiceBudget) return;
+        const a0 = o.a || 0.005;
+        this.voiceList.push([o.d ? t + a0 + o.d : t + Math.max(o.dur || 0.2, a0) + (o.r || 0.1), nOsc]);
+      }
       const g = c.createGain();
       let input = g;
       if (o.cut) {
@@ -590,8 +611,8 @@
       const outs = Array.isArray(out) ? out : [out];
       const v = vel / Math.sqrt(midis.length);
       midis.forEach((m, i) => {
-        this.synth({ t, f: mtof(m), dur, waves: [['sawtooth', -16, 0.22], ['sawtooth', -7, 0.22], ['sawtooth', 0, 0.22], ['sawtooth', 8, 0.22], ['sawtooth', 15, 0.22]],
-          cut: 1300 + vel * 1700, q: 0.5, a: 0.45, s: 0.9, r: 1.1, vib: [5, 0.003], peak: 0.05 * v, out: outs[i % outs.length], wet: 0.6 });
+        this.synth({ t, f: mtof(m), dur, waves: [['sawtooth', -13, 0.36], ['sawtooth', 0, 0.3], ['sawtooth', 12, 0.36]],
+          cut: 1300 + vel * 1700, q: 0.5, a: 0.45, s: 0.9, r: 1.1, peak: 0.05 * v, out: outs[i % outs.length], wet: 0.6 });
       });
     },
     // 銅管重音：濾波器快速打開再收回
@@ -605,11 +626,12 @@
 
     bassNote(t, midi, dur, timbre, out) {
       const P = {
-        sub: { waves: [['sine', 0, 1], ['triangle', 0, 0.25]], a: 0.01, s: 0.8, r: 0.12, peak: 0.22 },
+        sub: { waves: [['sine', 0, 1], ['triangle', 0, 0.35]], a: 0.01, s: 0.8, r: 0.12, peak: 0.18 },
         saw: { waves: [['sawtooth', 0, 0.6], ['sawtooth', -7, 0.4]], cut: 380, cutEnv: 4, cutTime: 0.1, q: 4, a: 0.005, s: 0.6, r: 0.08, peak: 0.12 },
         round: { waves: [['triangle', 0, 1], ['sine', 0, 0.5]], cut: 900, a: 0.01, s: 0.7, r: 0.1, peak: 0.2 },
-        808: { waves: [['sine', 0, 1], ['triangle', 0, 0.22]], pitchFrom: 1.35, glide: 0.07, a: 0.004, s: 0.85, r: 0.18, peak: 0.26 },
+        808: { waves: [['sine', 0, 1], ['triangle', 0, 0.3]], pitchFrom: 1.35, glide: 0.07, a: 0.004, s: 0.85, r: 0.18, peak: 0.2 },
       }[timbre];
+      while (midi < 33) midi += 12; // 低於 55Hz 手機聽不到，移到聽得到的八度
       this.synth(Object.assign({}, P, { t, f: mtof(midi), dur, out, wet: 0.04 }));
     },
 
@@ -640,11 +662,11 @@
       const v = vel || 1;
       switch (kind) {
         case 'kick':
-          this.synth({ t, f: 48, pitchFrom: 3.2, glide: 0.11, waves: [['sine', 0, 1]], d: 0.42, peak: 0.75 * v, out });
+          this.synth({ t, f: 52, pitchFrom: 3, glide: 0.1, waves: [['sine', 0, 1], ['sine', 0, 0.25, 2]], d: 0.38, peak: 0.6 * v, out });
           this.noise({ t, freq: 3500, d: 0.012, peak: 0.08 * v, out });
           break;
         case 'kickSoft':
-          this.synth({ t, f: 42, pitchFrom: 2.6, glide: 0.12, waves: [['sine', 0, 1]], d: 0.5, peak: 0.45 * v, out });
+          this.synth({ t, f: 50, pitchFrom: 2.4, glide: 0.12, waves: [['sine', 0, 1], ['sine', 0, 0.2, 2]], d: 0.45, peak: 0.38 * v, out });
           break;
         case 'snare':
           this.noise({ t, ftype: 'bandpass', freq: 1800, q: 0.7, d: 0.18, peak: 0.22 * v, out, wet: 0.25 });
@@ -670,12 +692,12 @@
           this.noise({ t, ftype: 'lowpass', freq: 700, d: 0.09, peak: 0.12 * v, out });
           break;
         case 'timpani':
-          this.synth({ t, f: 55, pitchFrom: 1.15, glide: 0.3, waves: [['sine', 0, 1]], d: 1.3, peak: 0.6 * v, out, wet: 0.4 });
+          this.synth({ t, f: 62, pitchFrom: 1.15, glide: 0.3, waves: [['sine', 0, 1]], d: 1.2, peak: 0.45 * v, out, wet: 0.4 });
           this.synth({ t, f: 110, waves: [['sine', 0, 1]], d: 0.5, peak: 0.12 * v, out });
           this.noise({ t, ftype: 'lowpass', freq: 320, d: 0.15, peak: 0.12 * v, out });
           break;
         case 'taikoBig':
-          this.synth({ t, f: 48, pitchFrom: 2, glide: 0.15, waves: [['sine', 0, 1]], d: 0.95, peak: 0.75 * v, out, wet: 0.45 });
+          this.synth({ t, f: 55, pitchFrom: 1.9, glide: 0.15, waves: [['sine', 0, 1], ['sine', 0, 0.2, 2]], d: 0.85, peak: 0.55 * v, out, wet: 0.4 });
           this.noise({ t, ftype: 'lowpass', freq: 500, d: 0.2, peak: 0.22 * v, out });
           break;
         case 'woodblock':
@@ -683,7 +705,7 @@
           this.noise({ t, ftype: 'bandpass', freq: 1800, q: 6, d: 0.02, peak: 0.06 * v, out });
           break;
         case 'tanggu':
-          this.synth({ t, f: 60, pitchFrom: 1.8, glide: 0.12, waves: [['sine', 0, 1]], d: 0.6, peak: 0.6 * v, out, wet: 0.25 });
+          this.synth({ t, f: 64, pitchFrom: 1.8, glide: 0.12, waves: [['sine', 0, 1]], d: 0.55, peak: 0.48 * v, out, wet: 0.25 });
           this.noise({ t, ftype: 'lowpass', freq: 400, d: 0.12, peak: 0.15 * v, out });
           break;
         case 'cymbal':
@@ -708,7 +730,7 @@
           this.synth({ t, f: 340, pitchFrom: 1.3, glide: 0.02, waves: [['triangle', 0, 1]], d: 0.07, peak: 0.12 * v, out });
           break;
         case 'buk': // 韓國桶鼓：深沉
-          this.synth({ t, f: 58, pitchFrom: 1.7, glide: 0.12, waves: [['sine', 0, 1]], d: 0.7, peak: 0.6 * v, out, wet: 0.3 });
+          this.synth({ t, f: 62, pitchFrom: 1.7, glide: 0.12, waves: [['sine', 0, 1]], d: 0.65, peak: 0.48 * v, out, wet: 0.3 });
           this.noise({ t, ftype: 'lowpass', freq: 450, d: 0.1, peak: 0.14 * v, out });
           break;
       }
@@ -925,7 +947,7 @@
       const eastern = song.epic === 'eastern';
       const tri = chordMidis(song, deg, 0, 3);
       if (stage >= 3 && s16 === 0) {
-        this.strings(t, tri.map((m) => m + 12).concat([tri[0]]), p.stepDur * 16, [0, 0, 0, 0.6, 0.85, 1.1][stage], p.outWide);
+        this.strings(t, tri.map((m) => m + 12), p.stepDur * 16, [0, 0, 0, 0.6, 0.85, 1.1][stage], p.outWide);
       }
       if (stage >= 3) {
         const hit = eastern
@@ -937,7 +959,6 @@
         this.brass(t, tri.map((m) => m + 12), p.stepDur * (s16 === 0 ? 3 : 2), stage >= 5 ? 1 : 0.7, out);
       }
       if (stage >= 5 && bar % 4 === 3 && s16 >= 12) this.drum(eastern ? 'tanggu' : 'tom', t, 0.6 + (s16 - 12) * 0.13, p.outDrum);
-      if (stage >= 5 && s16 % 8 === 0 && song.bassSeq[s16] !== '.') this.bassNote(t, degToMidi(song, deg, song.bassOct - 1), p.stepDur * 6, 'sub', out);
       // 升級前的鋪陳：小鼓滾奏越來越密、升騰音
       if (this.build) {
         const dense = s16 >= 12 ? 1 : s16 >= 8 ? 2 : 4;
@@ -1040,7 +1061,7 @@
           this.noise({ t: now, freq: 3000, d: 0.025, peak: 0.04, out });
           break;
         case 'hardDrop':
-          this.synth({ t: now, f: 46, pitchFrom: 3, glide: 0.09, waves: [['sine', 0, 1]], d: 0.3, peak: 0.55, out });
+          this.synth({ t: now, f: 58, pitchFrom: 2.6, glide: 0.08, waves: [['sine', 0, 1], ['sine', 0, 0.3, 2]], d: 0.26, peak: 0.4, out });
           this.synth({ t: now, f: mtof(tone(0, -1)), waves: [['triangle', 0, 1]], d: 0.16, peak: 0.1, out });
           this.noise({ t: now, freq: 1500, d: 0.07, peak: 0.07, out });
           break;
@@ -1058,7 +1079,7 @@
           if (n >= 4 || d.tspin) {
             this.pad(t0, chordMidis(song, deg, 0, 4).concat([extTone(song, deg, 4, 0)]), step * 8, 'stab', out, 2.2);
             this.drum('crash', t0, 1.2, out);
-            this.synth({ t: t0, f: 40, pitchFrom: 2.5, glide: 0.2, waves: [['sine', 0, 1]], d: 0.8, peak: 0.5, out });
+            this.synth({ t: t0, f: 55, pitchFrom: 2.2, glide: 0.2, waves: [['sine', 0, 1], ['sine', 0, 0.25, 2]], d: 0.7, peak: 0.36, out });
           }
           if (d.tspin) this.noise({ t: now, ftype: 'bandpass', freq: 400, freqEnd: 5000, sweep: 0.3, q: 3, d: 0.35, peak: 0.08, out, wet: 0.5 });
           if (d.pc) {
@@ -1080,7 +1101,7 @@
         case 'warp':
           // 進入超空間：1.4 秒的升騰音 + 低頻漸強
           this.riser(now, now + 1.4);
-          this.synth({ t: now, f: 40, pitchFrom: 0.5, glide: 1.3, waves: [['sawtooth', 0, 0.5], ['sine', 0, 1]], cut: 300, cutEnv: 0.3, cutTime: 1.3, a: 1.2, s: 1, dur: 1.3, r: 0.1, peak: 0.12, out, wet: 0.3 });
+          this.synth({ t: now, f: 55, pitchFrom: 0.5, glide: 1.3, waves: [['sawtooth', 0, 0.5], ['sine', 0, 1]], cut: 300, cutEnv: 0.3, cutTime: 1.3, a: 1.2, s: 1, dur: 1.3, r: 0.1, peak: 0.12, out, wet: 0.3 });
           for (let i = 0; i < 8; i++) this.synth({ t: now + i * 0.16, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.7], ['sine', 0, 0.2, 2]], d: 0.5, peak: 0.04 + i * 0.006, out, wet: 0.7 });
           break;
         case 'arrive':
@@ -1088,7 +1109,7 @@
           this.drum('taikoBig', now, 1.3, out);
           this.drum('timpani', now, 1, out);
           this.drum('crash', now, 1.4, out);
-          this.synth({ t: now, f: 36, pitchFrom: 2.2, glide: 0.4, waves: [['sine', 0, 1]], d: 1.4, peak: 0.6, out });
+          this.synth({ t: now, f: 52, pitchFrom: 2, glide: 0.4, waves: [['sine', 0, 1], ['sine', 0, 0.25, 2]], d: 1.2, peak: 0.42, out });
           [0, 2, 4, 7, 9].forEach((i) => this.synth({ t: now + 0.05, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.6], ['triangle', 0, 0.2, 2]], d: 2.2, peak: 0.06, out, wet: 0.8 }));
           break;
         case 'goShout':
@@ -1115,7 +1136,7 @@
           break;
         case 'garbage':
           // 垃圾行頂上來：沉重撞擊
-          this.synth({ t: now, f: 38, pitchFrom: 2.5, glide: 0.25, waves: [['sine', 0, 1]], d: 0.5, peak: 0.6, out });
+          this.synth({ t: now, f: 55, pitchFrom: 2.2, glide: 0.25, waves: [['sine', 0, 1], ['sine', 0, 0.3, 2]], d: 0.45, peak: 0.42, out });
           this.noise({ t: now, freq: 900, d: 0.18, peak: 0.12, out });
           this.drum('tom', now, 0.9, out);
           break;

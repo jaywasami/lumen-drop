@@ -2796,131 +2796,293 @@
   // 飛龍：祥雲、金龍追逐火焰寶珠（龍身沿軌跡蜿蜒、背鰭、龍角、龍鬚）
   // =========================================================
   class Dragon {
-    constructor(low) { this.low = low; this.flash = 0; this.t = 0; this.speed = 1; }
+    constructor(low) { this.low = low; this.flash = 0; this.t = 0; this.speed = 1; this.bloomScale = 0.6; }
     resize(w, h) {
       this.w = w; this.h = h;
       const sc = (this.sc = Math.min(w, h) / 412);
       const L = (this.bg = layer(w, h));
       const g = L.g;
-      g.fillStyle = vgrad(g, h, [[0, '#0b0f2a'], [0.45, '#1d2a5a'], [0.75, '#6a3a6a'], [1, '#c4664a']]);
+      g.fillStyle = vgrad(g, h, [[0, '#070a22'], [0.4, '#141d4a'], [0.7, '#43285a'], [0.88, '#8a3d4e'], [1, '#d0703e']]);
       g.fillRect(0, 0, w, h);
-      glow(g, w * 0.5, h * 0.95, w * 0.9, '255,170,90', 0.35);
-      for (let i = 0; i < 150; i++) { g.fillStyle = `rgba(255,240,220,${rand(0.1, 0.5)})`; g.fillRect(rand(0, w), rand(0, h * 0.5), 1, 1); }
-      this.clouds = [];
-      for (let i = 0; i < 9; i++) this.clouds.push({ x: rand(0, w), y: rand(0.1, 0.95) * h, s: rand(0.6, 1.2) * sc, a: rand(0.35, 0.7), v: rand(5, 14) * sc });
-      this.cloudImg = layer(140, 70);
-      // 將祥雲畫成素材
-      const C = this.cloudImg, cg = C.g;
-      cg.save(); cg.translate(70, 40);
-      cg.fillStyle = 'rgba(255,230,190,0.2)'; cg.strokeStyle = 'rgba(255,210,140,0.95)'; cg.lineWidth = 2;
-      cg.beginPath(); cg.moveTo(-60, 10); cg.quadraticCurveTo(-40, -20, -10, -5); cg.quadraticCurveTo(10, -30, 35, -10); cg.quadraticCurveTo(65, -15, 60, 10); cg.closePath(); cg.fill(); cg.stroke();
-      for (const [cx, cy, r] of [[-30, -6, 10], [10, -14, 13], [40, -4, 9]]) {
+      glow(g, w * 0.5, h * 1.02, w * 0.95, '255,160,80', 0.4);
+      for (let i = 0; i < 150; i++) { g.fillStyle = `rgba(255,240,220,${rand(0.1, 0.5)})`; g.fillRect(rand(0, w), rand(0, h * 0.55), 1, 1); }
+      // 祥雲：實心雲朵 + 金色捲雲邊
+      this.cloudImg = layer(160, 80);
+      const cg = this.cloudImg.g;
+      cg.save(); cg.translate(80, 46);
+      const cfill = cg.createLinearGradient(0, -30, 0, 16);
+      cfill.addColorStop(0, 'rgba(255,236,205,0.95)'); cfill.addColorStop(1, 'rgba(230,170,150,0.9)');
+      cg.fillStyle = cfill;
+      cg.beginPath(); cg.moveTo(-70, 14);
+      cg.bezierCurveTo(-74, -6, -48, -12, -38, -4); cg.bezierCurveTo(-34, -30, 0, -34, 6, -12);
+      cg.bezierCurveTo(18, -36, 58, -26, 50, -2); cg.bezierCurveTo(72, -4, 76, 14, 66, 14); cg.closePath(); cg.fill();
+      cg.strokeStyle = 'rgba(214,150,60,0.9)'; cg.lineWidth = 2;
+      for (const [cx, cy, r] of [[-40, 2, 9], [4, -8, 12], [44, 2, 8]]) {
         cg.beginPath();
-        for (let k = 0; k < 40; k++) { const a2 = k / 40 * TAU * 1.6; const rr = r * (1 - k / 50); cg.lineTo(cx + Math.cos(a2) * rr, cy + Math.sin(a2) * rr); }
+        for (let q = 0; q < 46; q++) { const a = q / 46 * TAU * 1.7 + Math.PI; const rr = r * (1 - q / 56); cg.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
         cg.stroke();
       }
       cg.restore();
+      this.clouds = [];
+      for (let i = 0; i < 8; i++) this.clouds.push({ x: rand(0, w), y: rand(0.05, 0.98) * h, s: rand(0.55, 1.1) * sc, a: rand(0.35, 0.65), v: rand(5, 12) * sc, front: i < 3 });
       this.pearl = softDot('255,120,40');
-      this.segN = this.low ? 36 : 48;
+      this.segN = this.low ? 40 : 54;
+      this.spacing = 11 * sc;
+      this.maxW = 21 * sc;
     }
+    // 繞著場地外圍飛：大橢圓 + 上下起伏，龍大部分時間在場地四周
     headPos(t) {
       const w = this.w, h = this.h;
-      return [w * (0.5 + 0.4 * Math.sin(t * 0.5)), h * (0.42 + 0.3 * Math.sin(t * 0.8 + 1) * Math.cos(t * 0.31))];
+      const a = t * 0.32;
+      return [w * 0.5 + Math.cos(a) * w * 0.44 + Math.sin(a * 3.1) * w * 0.04, h * 0.72 + Math.sin(a) * h * 0.22 + Math.sin(a * 2.3 + 1) * h * 0.03];
     }
     update(dt) {
       const s = dt / 1000;
       this.flash *= Math.pow(0.2, s);
-      this.speed = 1 + this.flash * 1.5;
+      this.speed = 1 + this.flash * 1.2;
       this.t += s * this.speed;
-      for (const c of this.clouds) { c.x += c.v * s; if (c.x > this.w + 80 * c.s) c.x = -80 * c.s; }
+      for (const c of this.clouds) { c.x += c.v * s; if (c.x > this.w + 90 * c.s) c.x = -90 * c.s; }
+    }
+    spine() {
+      const segs = [this.headPos(this.t)];
+      let tt = this.t;
+      for (let i = 1; i < this.segN; i++) {
+        const [px, py] = segs[i - 1];
+        let p = null;
+        for (let k = 0; k < 300; k++) {
+          tt -= 0.002;
+          const q = this.headPos(tt);
+          if (Math.hypot(q[0] - px, q[1] - py) >= this.spacing) { p = q; break; }
+        }
+        segs.push(p || this.headPos(tt));
+      }
+      // 在路徑上加一點蛇行擺動
+      const out = [];
+      for (let i = 0; i < segs.length; i++) {
+        const a = segs[Math.max(0, i - 1)], b = segs[Math.min(segs.length - 1, i + 1)];
+        const dx = a[0] - b[0], dy = a[1] - b[1], l = Math.hypot(dx, dy) || 1;
+        const wig = Math.sin(i * 0.33 - this.t * 3.2) * this.maxW * 0.55 * Math.min(1, i / 6);
+        out.push([segs[i][0] + (dy / l) * wig, segs[i][1] - (dx / l) * wig]);
+      }
+      return out;
+    }
+    width(i) {
+      const n = this.segN, u = i / (n - 1);
+      if (i < 3) return this.maxW * (0.78 + i * 0.07);
+      return this.maxW * Math.max(0.12, Math.sin(Math.min(1, u * 1.15) * Math.PI * 0.5 + 0.35) * (1 - u * 0.8));
+    }
+    frames(segs) {
+      // 每節的前進方向 d 與背部法向 n（背在行進方向的左側）
+      return segs.map((p, i) => {
+        const a = segs[Math.max(0, i - 1)], b = segs[Math.min(segs.length - 1, i + 1)];
+        let dx = a[0] - b[0], dy = a[1] - b[1];
+        const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+        // sg：背部朝上為 1、朝下翻轉為 -1；垂直飛行時接近 0（身體側翻，鰭和腹甲在中間交換邊）
+        const sg = Math.max(-1, Math.min(1, dx * 2.5));
+        return { x: p[0], y: p[1], dx, dy, nx: dy, ny: -dx, r: this.width(i), sg };
+      });
+    }
+    leg(g, f, side, t, ph, near) {
+      const sc = this.sc;
+      const up = f.sg >= 0 ? 1 : -1;
+      const bx = f.x - f.nx * f.r * 0.3 * up, by = f.y - f.ny * f.r * 0.3 * up;
+      const sw = Math.sin(t / 260 + ph) * 0.4;
+      // 上臂往腹側伸出、前臂向前、三爪張開；近側與遠側前後錯開
+      const a1 = Math.atan2(-f.ny * up, -f.nx * up) + (side > 0 ? -0.5 : 0.3) * up + sw;
+      const l1 = f.r * 1.5, l2 = f.r * 1.3;
+      const kx = bx + Math.cos(a1) * l1, ky = by + Math.sin(a1) * l1;
+      const fwd = Math.atan2(f.dy, f.dx);
+      const a2 = fwd * 0.6 + a1 * 0.4 + 0.3 * up;
+      const px = kx + Math.cos(a2) * l2, py = ky + Math.sin(a2) * l2;
+      g.lineCap = 'round';
+      g.strokeStyle = near ? '#b9781c' : '#7a4c16'; g.lineWidth = f.r * 0.75;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(kx, ky); g.lineTo(px, py); g.stroke();
+      g.strokeStyle = near ? '#f2c25a' : '#a06a22'; g.lineWidth = f.r * 0.3;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(kx, ky); g.stroke();
+      // 肘部火焰毛
+      g.fillStyle = near ? '#e2492c' : '#8a2a1e';
+      g.beginPath(); g.moveTo(kx, ky); g.quadraticCurveTo(kx - f.dx * f.r * 1.2 + f.nx * 4 * sc, ky - f.dy * f.r * 1.2 + f.ny * 4 * sc, kx - f.dx * f.r * 1.6, ky - f.dy * f.r * 1.6); g.lineTo(kx + f.nx * 2 * sc, ky + f.ny * 2 * sc); g.fill();
+      g.strokeStyle = near ? '#fff4d0' : '#c9a870'; g.lineWidth = Math.max(1, f.r * 0.14);
+      for (const c of [-0.6, 0, 0.6]) {
+        const ca = a2 + c;
+        g.beginPath(); g.moveTo(px, py);
+        g.quadraticCurveTo(px + Math.cos(ca) * f.r * 0.6, py + Math.sin(ca) * f.r * 0.6, px + Math.cos(ca + 0.7 * up) * f.r * 0.85, py + Math.sin(ca + 0.7 * up) * f.r * 0.85);
+        g.stroke();
+      }
+    }
+    drawHead(g, f, t) {
+      const k = this.maxW / 13;
+      g.save(); g.translate(f.x, f.y);
+      g.rotate(Math.atan2(f.dy, f.dx));
+      if (f.sg < 0) g.scale(1, -1); // 往左飛時翻面，頭頂永遠朝上
+      const jaw = 0.5 + 0.5 * Math.sin(t / 420);
+      // 鬃毛（火焰狀）
+      for (let q = 0; q < 7; q++) {
+        const ang = -2.2 + q * 0.62, len = (18 + (q % 2) * 8) * k;
+        const wv = Math.sin(t / 180 + q) * 3 * k;
+        g.fillStyle = q % 2 ? '#ff7a2a' : '#d6301e';
+        g.beginPath(); g.moveTo(-6 * k, 0);
+        g.quadraticCurveTo(-6 * k + Math.cos(ang) * len * 0.6 + wv, Math.sin(ang) * len * 0.6 - 4 * k, -6 * k + Math.cos(ang - 0.25) * len - 10 * k, Math.sin(ang) * len * 0.8 + wv);
+        g.quadraticCurveTo(-6 * k + Math.cos(ang) * len * 0.4, Math.sin(ang) * len * 0.3 + 4 * k, -6 * k, 0);
+        g.fill();
+      }
+      // 龍角（鹿角狀，往後分叉）
+      g.strokeStyle = '#f3e3b0'; g.lineCap = 'round';
+      for (const [y0, sc2] of [[-11, 1], [-9, 0.8]]) {
+        g.lineWidth = 2.6 * k * sc2;
+        g.beginPath(); g.moveTo(2 * k, y0 * k); g.bezierCurveTo(-6 * k, (y0 - 8) * k, -16 * k, (y0 - 10) * k, -28 * k * sc2, (y0 - 16) * k * sc2); g.stroke();
+        g.lineWidth = 1.8 * k * sc2;
+        g.beginPath(); g.moveTo(-10 * k, (y0 - 7) * k); g.quadraticCurveTo(-12 * k, (y0 - 14) * k, -8 * k, (y0 - 19) * k); g.stroke();
+      }
+      // 下顎（張合）
+      g.save(); g.translate(14 * k, 3 * k); g.rotate(jaw * 0.28);
+      const lj = g.createLinearGradient(0, 0, 0, 10 * k);
+      lj.addColorStop(0, '#f6d27a'); lj.addColorStop(1, '#b0701a');
+      g.fillStyle = lj;
+      g.beginPath(); g.moveTo(-18 * k, -2 * k); g.lineTo(20 * k, 0); g.quadraticCurveTo(22 * k, 3 * k, 18 * k, 5 * k); g.quadraticCurveTo(0, 9 * k, -18 * k, 7 * k); g.fill();
+      g.fillStyle = '#fff8e8';
+      for (let q = 0; q < 5; q++) { const x = 2 * k + q * 3.6 * k; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 1.4 * k, -2.6 * k); g.lineTo(x + 2.8 * k, 0); g.fill(); }
+      // 鬍鬚（下巴）
+      g.strokeStyle = '#e8562a'; g.lineWidth = 1.6 * k;
+      for (let q = 0; q < 4; q++) { g.beginPath(); g.moveTo(-4 * k + q * 4 * k, 7 * k); g.quadraticCurveTo(-8 * k + q * 3 * k, 14 * k, -14 * k + q * 2 * k + Math.sin(t / 200 + q) * 2 * k, 18 * k); g.stroke(); }
+      g.restore();
+      // 口腔
+      g.fillStyle = '#5a0c12';
+      g.beginPath(); g.moveTo(-2 * k, 2 * k); g.lineTo(36 * k, 1 * k); g.lineTo(34 * k, 3 * k + jaw * 10 * k); g.lineTo(-2 * k, 6 * k); g.fill();
+      // 上顎與頭骨
+      const hg = g.createLinearGradient(0, -16 * k, 0, 4 * k);
+      hg.addColorStop(0, '#fff2b8'); hg.addColorStop(0.45, '#f0b63a'); hg.addColorStop(1, '#a8661a');
+      g.fillStyle = hg;
+      g.beginPath();
+      g.moveTo(-10 * k, 8 * k);
+      g.bezierCurveTo(-12 * k, -6 * k, -4 * k, -14 * k, 6 * k, -15 * k); // 後腦到眉骨
+      g.quadraticCurveTo(12 * k, -16 * k, 16 * k, -11 * k);
+      g.bezierCurveTo(22 * k, -10 * k, 30 * k, -9 * k, 36 * k, -8 * k); // 吻部
+      g.quadraticCurveTo(43 * k, -8 * k, 42 * k, -2 * k); // 鼻頭
+      g.quadraticCurveTo(41 * k, 2 * k, 36 * k, 1.5 * k);
+      g.lineTo(-2 * k, 2.5 * k);
+      g.quadraticCurveTo(-6 * k, 6 * k, -10 * k, 8 * k);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(110,55,10,0.7)'; g.lineWidth = 1 * k; g.stroke();
+      // 上排牙與獠牙
+      g.fillStyle = '#fffaf0';
+      for (let q = 0; q < 6; q++) { const x = 12 * k + q * 3.8 * k; g.beginPath(); g.moveTo(x, 1.8 * k); g.lineTo(x + 1.4 * k, 4.4 * k); g.lineTo(x + 2.8 * k, 1.6 * k); g.fill(); }
+      g.beginPath(); g.moveTo(31 * k, 1.5 * k); g.lineTo(32.5 * k, 7.5 * k); g.lineTo(34 * k, 1.3 * k); g.fill();
+      // 鼻翼捲紋、鼻孔
+      g.strokeStyle = '#c0661a'; g.lineWidth = 1.2 * k;
+      g.beginPath(); g.arc(38 * k, -4 * k, 2.6 * k, Math.PI * 0.2, Math.PI * 1.6); g.stroke();
+      g.fillStyle = '#5a2a08'; g.beginPath(); g.ellipse(39.5 * k, -3.5 * k, 1.2 * k, 0.8 * k, 0.3, 0, TAU); g.fill();
+      // 眉骨（紅色火焰眉）與眼睛
+      g.fillStyle = '#e0402a';
+      g.beginPath(); g.moveTo(6 * k, -13 * k); g.quadraticCurveTo(14 * k, -19 * k, 20 * k, -12 * k); g.quadraticCurveTo(12 * k, -15 * k, 4 * k, -10 * k); g.fill();
+      g.fillStyle = '#fff6d0'; g.beginPath(); g.ellipse(13 * k, -9 * k, 3.6 * k, 2.4 * k, -0.15, 0, TAU); g.fill();
+      g.fillStyle = '#ff3a1a'; g.beginPath(); g.arc(13.8 * k, -9 * k, 1.8 * k, 0, TAU); g.fill();
+      g.fillStyle = '#100'; g.beginPath(); g.ellipse(14 * k, -9 * k, 0.6 * k, 1.5 * k, 0, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'lighter';
+      glow(g, 13.5 * k, -9 * k, 8 * k, '255,120,60', 0.45 + this.flash * 0.3);
+      g.globalCompositeOperation = 'source-over';
+      // 長鬚：從鼻側飄向後方
+      g.strokeStyle = 'rgba(255,240,200,0.9)'; g.lineWidth = 1.3 * k;
+      for (const [y0, amp] of [[-2, 1], [0, -1]]) {
+        g.beginPath(); g.moveTo(36 * k, y0 * k);
+        for (let q = 1; q <= 14; q++) g.lineTo(36 * k - q * 5.5 * k, y0 * k + amp * q * 1.2 * k + Math.sin(t / 260 + q * 0.6) * 3.5 * k);
+        g.stroke();
+      }
+      g.restore();
     }
     draw(g, t, beat, B) {
       const w = this.w, h = this.h, sc = this.sc;
       g.drawImage(this.bg.cv, 0, 0, w, h);
-      for (const c of this.clouds) { g.globalAlpha = c.a; g.drawImage(this.cloudImg.cv, c.x - 70 * c.s, c.y - 35 * c.s, 140 * c.s, 70 * c.s); }
+      const drawCloud = (c) => { g.globalAlpha = c.a; g.drawImage(this.cloudImg.cv, c.x - 80 * c.s, c.y - 40 * c.s, 160 * c.s, 80 * c.s); };
+      for (const c of this.clouds) if (!c.front) drawCloud(c);
       g.globalAlpha = 1;
-      // 寶珠（龍頭前方）
-      const ph = this.headPos(this.t + 0.35);
+      const segs = this.spine();
+      const F = this.frames(segs);
+      const n = F.length;
+      // 火焰寶珠在龍頭前方
+      const ph = this.headPos(this.t + 0.45);
       g.globalCompositeOperation = 'lighter';
-      const pr = (16 + beat * 6 + this.flash * 10) * sc;
-      g.drawImage(this.pearl.cv, ph[0] - pr * 2.5, ph[1] - pr * 2.5, pr * 5, pr * 5);
-      glow(g, ph[0], ph[1], pr * 1.2, '255,250,220', 0.9);
+      const pr = (13 + beat * 5 + this.flash * 8) * sc;
+      g.drawImage(this.pearl.cv, ph[0] - pr * 2.6, ph[1] - pr * 2.6, pr * 5.2, pr * 5.2);
+      glow(g, ph[0], ph[1], pr * 1.1, '255,250,220', 0.9);
+      g.strokeStyle = 'rgba(255,170,80,0.6)'; g.lineWidth = 1.5 * sc;
+      for (let q = 0; q < 3; q++) { g.beginPath(); g.arc(ph[0], ph[1], pr * (1.3 + q * 0.35), t / 300 + q * 2, t / 300 + q * 2 + 1.6); g.stroke(); }
+      glow(g, F[0].x, F[0].y, this.maxW * 6, '255,190,90', 0.12 + this.flash * 0.2);
       g.globalCompositeOperation = 'source-over';
-      // 龍身：沿軌跡取樣
-      const width = (i) => (34 * sc) * (i < 4 ? 0.7 + i * 0.08 : Math.max(0.15, 1 - (i - 4) / this.segN * 0.95));
-      // 沿飛行軌跡按距離取樣：每節間隔固定，龍身才會拉長蜿蜒
-      const segs = [this.headPos(this.t)];
-      let tt = this.t;
-      for (let i = 1; i < this.segN; i++) {
-        const gap = Math.max(4 * sc, width(i) * 0.42);
-        const [px, py] = segs[i - 1];
-        let p = null;
-        for (let k = 0; k < 200; k++) {
-          tt -= 0.004;
-          const q = this.headPos(tt);
-          if (Math.hypot(q[0] - px, q[1] - py) >= gap) { p = q; break; }
+      // 遠側的腳（先畫，被身體擋住）
+      for (const [i, ph2] of [[7, 0], [25, 2]]) if (F[i]) this.leg(g, F[i], -1, t, ph2 + 1.5, false);
+      // 背鰭
+      for (let i = 3; i < n - 4; i += 2) {
+        const f = F[i], fl = f.r * 1.25 * Math.abs(f.sg);
+        if (fl < 1) continue;
+        const nx = f.nx * Math.sign(f.sg), ny = f.ny * Math.sign(f.sg);
+        const bxp = f.x + nx * f.r * 0.8, byp = f.y + ny * f.r * 0.8;
+        const tx = bxp + nx * fl - f.dx * fl * 0.9, ty = byp + ny * fl - f.dy * fl * 0.9;
+        g.fillStyle = i % 4 === 1 ? '#ff7a2a' : '#d42c1c';
+        g.beginPath(); g.moveTo(bxp + f.dx * f.r * 0.5, byp + f.dy * f.r * 0.5);
+        g.quadraticCurveTo(bxp + nx * fl * 0.6, byp + ny * fl * 0.6, tx, ty);
+        g.lineTo(bxp - f.dx * f.r * 0.7, byp - f.dy * f.r * 0.7); g.fill();
+      }
+      // 尾端火焰
+      const tl = F[n - 1], tl2 = F[n - 4];
+      for (let q = 0; q < 3; q++) {
+        const ang = Math.atan2(-tl2.dy, -tl2.dx) + (q - 1) * 0.5 + Math.sin(t / 200 + q) * 0.15;
+        const len = this.maxW * (2.2 - Math.abs(q - 1) * 0.6);
+        g.fillStyle = q === 1 ? '#ff8a32' : '#d42c1c';
+        g.beginPath(); g.moveTo(tl.x, tl.y);
+        g.quadraticCurveTo(tl.x + Math.cos(ang + 0.4) * len * 0.6, tl.y + Math.sin(ang + 0.4) * len * 0.6, tl.x + Math.cos(ang) * len, tl.y + Math.sin(ang) * len);
+        g.quadraticCurveTo(tl.x + Math.cos(ang - 0.4) * len * 0.5, tl.y + Math.sin(ang - 0.4) * len * 0.5, tl.x, tl.y); g.fill();
+      }
+      // 身體：一整條連續的管狀輪廓
+      const back = F.map((f) => [f.x + f.nx * f.r, f.y + f.ny * f.r]);
+      const belly = F.map((f) => [f.x - f.nx * f.r, f.y - f.ny * f.r]);
+      g.beginPath();
+      back.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      for (let i = n - 1; i >= 0; i--) g.lineTo(belly[i][0], belly[i][1]);
+      g.closePath();
+      g.fillStyle = '#a8621a'; g.fill();
+      g.strokeStyle = '#5e3208'; g.lineWidth = 1.4 * sc; g.stroke();
+      // 背部較暗、中段金亮的光影
+      g.save(); g.clip();
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      const band = (off, wd, col) => {
+        g.strokeStyle = col; g.lineWidth = wd;
+        g.beginPath(); F.forEach((f, i) => { const x = f.x + f.nx * f.r * off * f.sg, y = f.y + f.ny * f.r * off * f.sg; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+      };
+      band(0.85, this.maxW * 0.5, 'rgba(120,60,10,0.55)');
+      band(0.3, this.maxW * 0.5, 'rgba(240,180,70,0.6)');
+      band(0.4, this.maxW * 0.14, 'rgba(255,235,170,0.55)');
+      // 鱗片
+      g.strokeStyle = 'rgba(110,55,8,0.55)'; g.lineWidth = Math.max(0.8, 0.9 * sc);
+      for (let i = 2; i < n - 2; i += 2) {
+        const f = F[i];
+        if (f.r < 3 * sc) continue;
+        const a = Math.atan2(f.dy, f.dx);
+        for (const off of (i % 2 ? [0.55, -0.05] : [0.25, 0.85])) {
+          const x = f.x + f.nx * f.r * off * f.sg, y = f.y + f.ny * f.r * off * f.sg;
+          g.beginPath(); g.arc(x, y, f.r * 0.32, a + Math.PI * 0.55, a + Math.PI * 1.45); g.stroke();
         }
-        segs.push(p || this.headPos(tt));
       }
-      // 背鰭（紅色）
-      g.fillStyle = '#c8281e';
-      for (let i = 2; i < segs.length - 2; i += 2) {
-        const [x0, y0] = segs[i - 1], [x1, y1] = segs[i + 1];
-        const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
-        const nx = -dy / l, ny = dx / l, wv = width(i);
-        const [x, y] = segs[i];
-        g.beginPath(); g.moveTo(x + nx * wv * 0.45 - dx * 0.3, y + ny * wv * 0.45 - dy * 0.3); g.lineTo(x + nx * wv * 1.05, y + ny * wv * 1.05); g.lineTo(x + nx * wv * 0.45 + dx * 0.3, y + ny * wv * 0.45 + dy * 0.3); g.fill();
-      }
-      // 身體：由尾往頭畫圓節，金色漸層 + 鱗片
-      for (let i = segs.length - 1; i >= 0; i--) {
-        const [x, y] = segs[i];
-        const r = width(i) * 0.55;
-        const bg = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-        bg.addColorStop(0, '#fff3b0'); bg.addColorStop(0.5, '#f0b434'); bg.addColorStop(1, '#8a5210');
-        g.fillStyle = bg; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
-        if (i % 2 === 0 && r > 3) { g.strokeStyle = 'rgba(120,60,10,0.45)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y + r * 0.2, r * 0.6, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
-      }
-      // 龍爪（兩對）
-      for (const i of [8, 22]) {
-        if (!segs[i + 1]) continue;
-        const [x, y] = segs[i], [x1, y1] = segs[i + 1];
-        const dx = x1 - x, dy = y1 - y, l = Math.hypot(dx, dy) || 1;
-        const nx = dy / l, ny = -dx / l, wv = width(i);
-        g.strokeStyle = '#d8962a'; g.lineWidth = 3 * sc; g.lineCap = 'round';
-        const fx = x + nx * wv * 1.2 + Math.sin(t / 200 + i) * 3, fy = y + ny * wv * 1.2;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(fx, fy); g.stroke();
-        g.strokeStyle = '#fff0c0'; g.lineWidth = 1.2 * sc;
-        for (const a of [-0.5, 0, 0.5]) { g.beginPath(); g.moveTo(fx, fy); g.lineTo(fx + Math.cos(Math.atan2(ny, nx) + a) * 5 * sc, fy + Math.sin(Math.atan2(ny, nx) + a) * 5 * sc); g.stroke(); }
-      }
-      // 龍頭
-      const [hx, hy] = segs[0];
-      const [nx2, ny2] = segs[2];
-      const ang = Math.atan2(hy - ny2, hx - nx2);
-      g.save(); g.translate(hx, hy); g.rotate(ang);
-      const k = sc * 1.9;
-      // 龍鬚
-      g.strokeStyle = 'rgba(255,240,200,0.9)'; g.lineWidth = 1.2 * k;
-      for (const sgn of [-1, 1]) {
-        g.beginPath(); g.moveTo(16 * k, sgn * 4 * k);
-        for (let q = 1; q <= 10; q++) g.lineTo(16 * k - q * 5 * k, sgn * (4 + q * 2.2) * k + Math.sin(t / 250 + q * 0.7) * 3 * k);
-        g.stroke();
-      }
-      // 鬃毛
-      g.fillStyle = '#d03a22';
-      g.beginPath(); g.moveTo(-6 * k, -8 * k); g.quadraticCurveTo(-22 * k, -16 * k, -26 * k, -4 * k); g.quadraticCurveTo(-20 * k, 0, -26 * k, 6 * k); g.quadraticCurveTo(-16 * k, 14 * k, -6 * k, 8 * k); g.fill();
-      // 頭形
-      const hg = g.createLinearGradient(0, -10 * k, 0, 10 * k);
-      hg.addColorStop(0, '#fff0a0'); hg.addColorStop(1, '#c47c16');
-      g.fillStyle = hg;
-      g.beginPath(); g.moveTo(-8 * k, -9 * k); g.quadraticCurveTo(10 * k, -11 * k, 22 * k, -4 * k); g.lineTo(24 * k, 2 * k); g.quadraticCurveTo(12 * k, 4 * k, 20 * k, 7 * k); g.quadraticCurveTo(6 * k, 11 * k, -8 * k, 9 * k); g.closePath(); g.fill();
-      // 龍角
-      g.strokeStyle = '#f5e2a8'; g.lineWidth = 2.2 * k;
-      g.beginPath(); g.moveTo(0, -8 * k); g.quadraticCurveTo(-8 * k, -18 * k, -18 * k, -22 * k); g.stroke();
-      g.beginPath(); g.moveTo(-9 * k, -16 * k); g.lineTo(-6 * k, -22 * k); g.stroke();
-      // 眼
-      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(8 * k, -4 * k, 3 * k, 2 * k, 0, 0, TAU); g.fill();
-      g.fillStyle = '#c00'; g.beginPath(); g.arc(8.5 * k, -4 * k, 1.3 * k, 0, TAU); g.fill();
       g.restore();
+      // 腹甲：奶油色帶 + 橫紋
+      g.beginPath();
+      F.forEach((f, i) => { const x = f.x - f.nx * f.r * 0.35 * f.sg, y = f.y - f.ny * f.r * 0.35 * f.sg; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+      for (let i = n - 1; i >= 0; i--) { const f = F[i]; g.lineTo(f.x - f.nx * f.r * 0.98 * f.sg, f.y - f.ny * f.r * 0.98 * f.sg); }
+      g.closePath();
+      g.fillStyle = '#e8c88a'; g.fill();
+      g.strokeStyle = 'rgba(140,90,40,0.55)'; g.lineWidth = Math.max(0.8, 0.9 * sc);
+      for (let i = 1; i < n - 2; i += 2) {
+        const f = F[i];
+        if (f.r < 2 * sc) continue;
+        if (Math.abs(f.sg) < 0.2) continue;
+        g.beginPath(); g.moveTo(f.x - f.nx * f.r * 0.35 * f.sg, f.y - f.ny * f.r * 0.35 * f.sg); g.lineTo(f.x - f.nx * f.r * 0.98 * f.sg, f.y - f.ny * f.r * 0.98 * f.sg); g.stroke();
+      }
+      // 近側的腳
+      for (const [i, ph2] of [[5, 0], [23, 2]]) if (F[i]) this.leg(g, F[i], 1, t, ph2, true);
+      this.drawHead(g, F[0], t);
+      // 前景雲：龍在雲間穿梭
+      for (const c of this.clouds) if (c.front) drawCloud(c);
+      g.globalAlpha = 1;
     }
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.3 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
   }
