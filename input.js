@@ -85,6 +85,8 @@
           else this.rebinding(null);
           return;
         }
+        const tg = e.target;
+        if (tg && (tg.tagName === 'TEXTAREA' || (tg.tagName === 'INPUT' && tg.type !== 'range'))) return; // 輸入暱稱、房號時不觸發遊戲按鍵
         if (e.repeat) { if (this.keysFor(e.code).length) e.preventDefault(); return; }
         if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); this.onPause(); return; }
         if (e.code === 'KeyR') { this.onRestart(); return; }

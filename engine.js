@@ -64,6 +64,18 @@
   ];
   const T_CORNERS = [[0, 0], [2, 0], [0, 2], [2, 2]];
 
+  // 對戰：連擊攻擊加成（索引 = 第幾次連續消行，0 = 第一次）
+  const COMBO_ATTACK = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5];
+  // 對戰：一次消行要送出幾行垃圾
+  function attackFor(lines, tspin, mini, b2b, combo, pc) {
+    if (lines <= 0) return 0;
+    let a = tspin ? (mini ? [0, 0, 1, 2][lines] : [0, 2, 4, 6][lines]) : [0, 0, 1, 2, 4][lines];
+    if (b2b) a += 1;
+    a += COMBO_ATTACK[Math.min(Math.max(combo, 0), COMBO_ATTACK.length - 1)];
+    if (pc) a += 10;
+    return a;
+  }
+
   function mulberry32(a) {
     return function () {
       a |= 0; a = (a + 0x6d2b79f5) | 0;
@@ -83,6 +95,7 @@
     linesPerLevel: 10,
     gravityScale: 1, // 等級對速度的影響倍率（< 1 = 加速較慢）
     reward: 1, // 過關獎勵：升級後該關起始速度倍率（< 1 = 先放慢，隨消行逐漸加回 1）
+    maxGarbagePerLock: 8, // 對戰：每次放下方塊最多頂上來幾行垃圾
   };
 
   function gravityCps(level) {
@@ -118,6 +131,10 @@
       this.pieces = 0;
       this.time = 0;
       this.over = false;
+      this.garbageQueue = [];
+      this.garbageRng = mulberry32((this.seed ^ 0x9e3779b9) >>> 0);
+      this.attackSent = 0;
+      this.garbageTaken = 0;
       this.held = { left: false, right: false, softDrop: false };
       this.activeDir = 0;
       this.das = 0;
@@ -144,6 +161,38 @@
       if (this.level <= s.startLevel || s.reward >= 1) return 1;
       const progress = (this.lines % s.linesPerLevel) / s.linesPerLevel;
       return s.reward + (1 - s.reward) * progress;
+    }
+
+    // ---------- 對戰：垃圾行 ----------
+    receiveGarbage(n) {
+      n = Math.floor(n);
+      if (n > 0 && !this.over) { this.garbageQueue.push(n); this.emit('garbageQueued', { lines: n, pending: this.pendingGarbage() }); }
+    }
+
+    pendingGarbage() {
+      return this.garbageQueue.reduce((a, b) => a + b, 0);
+    }
+
+    // 從底部頂上垃圾行（同一批的缺口在同一欄）；回傳實際頂上的行數
+    applyGarbage() {
+      let budget = this.settings.maxGarbagePerLock;
+      let total = 0;
+      while (budget > 0 && this.garbageQueue.length) {
+        const take = Math.min(budget, this.garbageQueue[0]);
+        const hole = Math.floor(this.garbageRng() * W);
+        for (let k = 0; k < take; k++) {
+          const top = this.board.shift();
+          if (top.some((v) => v)) this.toppedByGarbage = true;
+          const row = new Uint8Array(W).fill(8);
+          row[hole] = 0;
+          this.board.push(row);
+        }
+        this.garbageQueue[0] -= take;
+        if (this.garbageQueue[0] <= 0) this.garbageQueue.shift();
+        budget -= take; total += take;
+      }
+      if (total) { this.garbageTaken += total; this.emit('garbage', { lines: total, pending: this.pendingGarbage() }); }
+      return total;
     }
 
     next(n = 5) {
@@ -411,7 +460,23 @@
       }
       this.score += gained;
 
-      this.emit('lock', { cells, type: p.type, lines: n, tspin, mini });
+      // 對戰：消行產生攻擊，先抵銷自己排隊中的垃圾，剩下的送給對手；沒消行就把垃圾頂上來
+      let attack = 0;
+      if (n > 0) {
+        attack = attackFor(n, tspin, mini, b2bApplied, combo, pc);
+        let a = attack;
+        while (a > 0 && this.garbageQueue.length) {
+          const take = Math.min(a, this.garbageQueue[0]);
+          this.garbageQueue[0] -= take; a -= take;
+          if (this.garbageQueue[0] <= 0) this.garbageQueue.shift();
+        }
+        if (attack - a > 0) this.emit('garbageCancel', { lines: attack - a, pending: this.pendingGarbage() });
+        if (a > 0) { this.attackSent += a; this.emit('attack', { lines: a, raw: attack }); }
+      } else if (this.garbageQueue.length) {
+        this.applyGarbage();
+      }
+
+      this.emit('lock', { cells, type: p.type, lines: n, tspin, mini, attack });
       if (n > 0 || tspin) {
         this.emit('clear', {
           lines: n, rows: clearedRows, tspin, mini, combo, b2b: b2bApplied, pc, gained, type: p.type,
@@ -420,6 +485,11 @@
       if (this.level > prevLevel) this.emit('levelUp', { level: this.level });
 
       this.canHold = true;
+      if (this.toppedByGarbage) {
+        this.over = true; this.cur = null;
+        this.emit('gameOver', { reason: 'garbage' });
+        return;
+      }
       this.spawn();
     }
 
@@ -515,6 +585,7 @@
   }
 
   const api = {
+    attackFor, COMBO_ATTACK,
     Game, W, H, VIS, HIDDEN, TYPES, TYPE_ID, SHAPES, DEFAULT_SETTINGS, gravityCps, mulberry32,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

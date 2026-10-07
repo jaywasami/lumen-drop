@@ -12,7 +12,7 @@
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true, name: '', vsRounds: 3,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -44,13 +44,14 @@
     document.body.classList.toggle('post-on', !!post);
   }
   const pauseBtn = $('btn-pause');
-  const overlays = ['menu', 'pause', 'gameover', 'help', 'settings'].reduce((o, k) => (o[k] = $(k), o), {});
+  const overlays = ['menu', 'pause', 'gameover', 'help', 'settings', 'versus', 'room', 'vsresult', 'vsquit'].reduce((o, k) => (o[k] = $(k), o), {});
   function showOverlay(name) {
     for (const k in overlays) overlays[k].classList.toggle('hidden', k !== name);
   }
 
   // ================= 狀態 =================
-  let mode = 'menu'; // menu | countdown | playing | transition | paused | over
+  let mode = 'menu'; // menu | countdown | playing | transition | paused | over | vsround | vsdone
+  let vs = null; // 對戰狀態（單機時為 null）
   let resumeMode = 'playing';
   let tr = null; // 過關過場
   let levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
@@ -66,10 +67,13 @@
   let audioStarted = false;
 
   const input = new Input({
-    getGame: () => (mode === 'playing' ? game : null),
+    getGame: () => (mode === 'playing' && !(vs && vs.quitOpen) ? game : null),
     settings,
-    onPause: () => { if (mode === 'playing') pauseGame(); else if (mode === 'paused') resumeGame(); else if (mode === 'menu') startGame(); },
-    onRestart: () => { if (mode === 'playing' || mode === 'paused' || mode === 'over') startGame(); },
+    onPause: () => {
+      if (vs && vs.kind === 'net') { if (mode === 'playing' || mode === 'countdown' || mode === 'vsround') toggleVsQuit(); return; }
+      if (mode === 'playing') pauseGame(); else if (mode === 'paused') resumeGame(); else if (mode === 'menu' && !overlays.menu.classList.contains('hidden')) startGame();
+    },
+    onRestart: () => { if (vs) return; if (mode === 'playing' || mode === 'paused' || mode === 'over') startGame(); },
     onFirstInput: () => Snd.resume(),
     onHaptic: haptic,
   });
@@ -123,6 +127,7 @@
   let scene = null;
   let prevScene = null;
   let sceneFade = 1;
+  let sceneFadeMs = 2200;
 
   function getScene(i) {
     if (!scenes[i]) {
@@ -138,6 +143,7 @@
     if (next === scene) return;
     if (instant || !scene) { scene = next; prevScene = null; sceneFade = 1; return; }
     prevScene = scene; scene = next; sceneFade = 0;
+    sceneFadeMs = vs ? 4800 : 2200; // 對戰中場景慢慢轉換，不打斷比賽
   }
   function rebuildScenes() {
     scenes.length = 0;
@@ -149,15 +155,15 @@
     const tgt = THEMES[themeIdx].accent;
     for (let i = 0; i < 3; i++) accent[i] += (tgt[i] - accent[i]) * k;
     if (sceneFade < 1) {
-      sceneFade = Math.min(1, sceneFade + dt / 2200);
+      sceneFade = Math.min(1, sceneFade + dt / sceneFadeMs);
       if (sceneFade >= 1) prevScene = null;
     }
   }
   const rgb = (a, al) => (al == null ? `rgb(${a[0] | 0},${a[1] | 0},${a[2] | 0})` : `rgba(${a[0] | 0},${a[1] | 0},${a[2] | 0},${al})`);
 
   // ================= 方塊精靈（依主題換材質） =================
-  const COLORS = { I: '#3de9ff', O: '#ffe14d', T: '#c070ff', S: '#5dff8a', Z: '#ff5d6c', J: '#5d8bff', L: '#ffa94d' };
-  const ID_TYPE = ['', 'I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+  const COLORS = { I: '#3de9ff', O: '#ffe14d', T: '#c070ff', S: '#5dff8a', Z: '#ff5d6c', J: '#5d8bff', L: '#ffa94d', G: '#7c8494' };
+  const ID_TYPE = ['', 'I', 'O', 'T', 'S', 'Z', 'J', 'L', 'G']; // 8 = 對戰垃圾行
   let sprites = {};
   let spriteKey = '';
 
@@ -288,26 +294,28 @@
     touchEl.style.setProperty('--rb', rb + 'px');
     touchEl.style.setProperty('--hdgap', hdGap + 'px');
     const padH = rs * 2 + rb + hdGap + 8 * 3 + 14;
+    const gapK = vs ? 0.5 : 0.3; // 對戰時加寬場地左側間隙，放垃圾行量表
     if (portrait) {
       const reserve = buttons ? padH + 12 : 12;
       const top = 10;
-      cell = Math.floor(Math.min((vw - 14) / 17.2, (vh - reserve - top - 6) / 20));
+      cell = Math.floor(Math.min((vw - 14) / (16.6 + gapK * 2), (vh - reserve - top - 6) / 20));
       const avail = vh - reserve - top;
       by = top + Math.max(0, (avail - cell * 20) * 0.5);
     } else {
       cell = Math.floor(Math.min((vh - 20) / 20, vw / 24));
       by = (vh - cell * 20) / 2;
     }
-    sideW = cell * 3.3; gap = cell * 0.3;
+    sideW = cell * 3.3; gap = cell * gapK;
     const totalW = sideW * 2 + gap * 2 + cell * 10;
     bx = (vw - totalW) / 2 + sideW + gap;
     input.cellPx = cell;
     const lx = bx - gap - sideW;
     pauseBtn.style.left = `${lx}px`;
-    pauseBtn.style.top = `${by + cell * 11.6}px`;
+    pauseBtn.style.top = `${by + cell * (vs ? 16.6 : 11.6)}px`;
     pauseBtn.style.width = `${sideW}px`;
     pauseBtn.style.height = `${cell * 1.7}px`;
     pauseBtn.style.fontSize = `${Math.max(11, cell * 0.55)}px`;
+    pauseBtn.textContent = vs && vs.kind === 'net' ? '離開' : '❚❚';
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
     touchEl.classList.toggle('show180', !!settings.show180);
     applyCustomPad();
@@ -432,7 +440,7 @@
   function boardInfo() { return { x: bx, y: by, w: cell * 10, h: cell * VIS, c: cell, cx: bx + cell * 5, cy: by + cell * 10 }; }
 
   // ================= 特效 =================
-  const fx = { particles: [], flashes: [], rings: [], streaks: [], popups: [], lockFlash: [], shards: [], waves: [], shake: 0, pulse: 0, aberr: 0, flash: 0, impact: 0, impactV: 0, rowOff: null, rowT: 1 };
+  const fx = { missiles: [], particles: [], flashes: [], rings: [], streaks: [], popups: [], lockFlash: [], shards: [], waves: [], shake: 0, pulse: 0, aberr: 0, flash: 0, impact: 0, impactV: 0, rowOff: null, rowT: 1 };
   const maxParticles = () => (settings.fx === 'low' ? 140 : 480);
   function addParticle(p) { if (fx.particles.length < maxParticles()) fx.particles.push(p); }
   function burst(x, y, color, n, speed, life, gravity) {
@@ -449,6 +457,11 @@
       const p = fx.particles[i];
       p.life -= s; if (p.life <= 0) { fx.particles.splice(i, 1); continue; }
       p.vy += p.g * s; p.x += p.vx * s; p.y += p.vy * s;
+    }
+    for (let i = fx.missiles.length - 1; i >= 0; i--) {
+      const m = fx.missiles[i];
+      m.t += s;
+      if (m.t >= m.life) { burst(m.x1, m.y1, m.color, settings.fx === 'low' ? 5 : 14, cell * 5, 0.45, 0); fx.missiles.splice(i, 1); }
     }
     for (const arr of [fx.flashes, fx.rings, fx.streaks, fx.popups, fx.lockFlash]) {
       for (let i = arr.length - 1; i >= 0; i--) { arr[i].t += s; if (arr[i].t >= arr[i].life) arr.splice(i, 1); }
@@ -523,7 +536,7 @@
         intensity = musicStage();
         {
           const lpl = game.settings.linesPerLevel;
-          Snd.setBuild(lpl - (game.lines % lpl) <= 2);
+          Snd.setBuild(vs ? game.pendingGarbage() >= 4 : lpl - (game.lines % lpl) <= 2);
         }
         Snd.setBoost(d.combo >= 2 ? d.combo : 0);
         levelStart.maxCombo = Math.max(levelStart.maxCombo, d.combo);
@@ -586,6 +599,15 @@
         Snd.setBuild(false);
         intensity = musicStage();
         Snd.play('levelUp');
+        if (vs) {
+          // 對戰：沒有過場、沒有減速獎勵，場景與音樂慢慢轉換
+          Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
+          setTheme(idx);
+          popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
+          fx.rings.push({ t: 0, life: 1.1 });
+          fx.pulse = Math.max(fx.pulse, 0.6);
+          break;
+        }
         if (settings.transitions && mode === 'playing') {
           startTransition(idx, d.level);
           break;
@@ -599,7 +621,39 @@
         fx.flash = Math.max(fx.flash, 0.35);
         break;
       }
+      case 'attack': if (vs) vsSendAttack(d.lines); break;
+      case 'garbageQueued':
+        if (!vs) break;
+        Snd.play('warn');
+        missile(oppBoardCenter(), meterTop(), d.lines, '#ff5d6c', 0.55);
+        Snd.setBuild(game.pendingGarbage() >= 4);
+        break;
+      case 'garbageCancel':
+        if (!vs) break;
+        popup([`抵銷 ${d.lines}`], '#8be9ff');
+        Snd.setBuild(game.pendingGarbage() >= 4);
+        break;
+      case 'garbage': {
+        if (!vs) break;
+        Snd.play('garbage');
+        Snd.setBuild(game.pendingGarbage() >= 4);
+        fx.shake = Math.max(fx.shake, 4 + d.lines * 1.2);
+        fx.impactV -= Math.min(60 + d.lines * 20, 220);
+        fx.aberr = Math.max(fx.aberr, 0.5);
+        for (let i = 0; i < Math.min(d.lines, 8); i++) {
+          const [px, py] = cellPos(0, H - 1 - i);
+          for (let x = 0; x < W; x += 2) burst(px + x * cell + cell / 2, py + cell / 2, '#ff6b7a', 1, cell * 6, 0.5, cell * 10);
+        }
+        if (navigator.vibrate && settings.haptics) navigator.vibrate(30);
+        break;
+      }
       case 'gameOver':
+        if (vs) {
+          Snd.setBoost(0); Snd.setBuild(false); Snd.play('gameOver');
+          input.releaseAll();
+          vsLocalDead();
+          break;
+        }
         Snd.stopMusic(2);
         Snd.setBoost(0);
         Snd.setBuild(false);
@@ -612,16 +666,20 @@
   function popup(lines, color) { fx.popups.push({ lines, color, t: 0, life: 1.5 }); if (fx.popups.length > 3) fx.popups.shift(); }
 
   // ================= 遊戲流程 =================
-  function startGame() {
+  function startGame(opts) {
+    const versus = !!(opts && opts.versus);
+    if (!versus && vs) cleanupVs();
     ensureAudio();
     input.releaseAll();
-    const lv = Math.max(1, Math.min(15, settings.startLevel | 0));
+    const lv = versus ? 1 : Math.max(1, Math.min(THEMES.length, settings.startLevel | 0));
     const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
-    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale, reward: diff.reward }, onEvent: onGameEvent });
+    game = versus
+      ? new E.Game({ seed: opts.seed, settings: vsGameSettings(), onEvent: onGameEvent })
+      : new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale, reward: diff.reward }, onEvent: onGameEvent });
     levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
     tr = null;
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
-    fx.shards.length = 0; fx.waves.length = 0; fx.aberr = 0; fx.flash = 0; fx.impact = 0; fx.impactV = 0; fx.rowT = 1;
+    fx.shards.length = 0; fx.waves.length = 0; fx.missiles.length = 0; fx.aberr = 0; fx.flash = 0; fx.impact = 0; fx.impactV = 0; fx.rowT = 1;
     fx.shake = 0; fx.pulse = 0; overFade = 0; overShown = false; lastWasHardDrop = false;
     const idx = (lv - 1) % THEMES.length;
     setTheme(idx);
@@ -633,6 +691,7 @@
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
     showOverlay(null);
     touchEl.classList.toggle('hidden', settings.controls === 'off');
+    layout();
     requestWake();
   }
   function pauseGame() {
@@ -645,7 +704,9 @@
     mode = resumeMode || 'playing'; showOverlay(null); Snd.setMuffled(false); Snd.play('ui');
   }
   function toMenu() {
+    cleanupVs();
     mode = 'menu'; input.releaseAll(); game = null; showOverlay('menu');
+    layout();
     touchEl.classList.add('hidden');
     $('best-score').textContent = getBest().toLocaleString();
     setTheme(0);
@@ -653,6 +714,486 @@
     if (audioStarted) Snd.playSong(THEMES[0].name, 0);
     releaseWake();
   }
+
+  // ================= 對戰 =================
+  // 電腦對戰：另一個 Engine.Game + LumenBot；連線對戰：LumenNet（PeerJS），房主判定每局勝負。
+  // 訊息：hello{name,rounds} round{r,seed,rounds,lpl,gs} atk{n,r} b{s,p,l,a,n} dead{r}
+  //       result{r,hostWon,wins,over} rematch ping{ts} pong{ts} bye full
+  const ROUND_NAMES = { 1: '一局決勝', 3: '三戰兩勝', 5: '五戰三勝' };
+  const CPU_NAMES = { easy: '電腦・簡單', normal: '電腦・普通', hard: '電腦・困難' };
+  const myName = () => (settings.name || '').trim().slice(0, 12) || '玩家';
+  const needWins = () => Math.ceil((vs ? vs.rounds : 1) / 2);
+  const randSeed = () => (Math.random() * 4294967296) >>> 0;
+  function vsGameSettings() {
+    return { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: 1, linesPerLevel: vs.lpl, gravityScale: vs.gs, reward: 1 };
+  }
+  function newVs(o) {
+    return Object.assign({
+      kind: 'cpu', isHost: true, rounds: 3, lpl: 12, gs: 0.55, round: 0, wins: [0, 0], oppName: null, code: null,
+      opp: { s: '', p: 0, l: 1, a: 0, n: 0 }, oppGame: null, bot: null, net: null, started: false, matchOver: false,
+      decided: false, banner: null, oppDead: false, localDead: false, myReady: false, oppReady: false,
+      rtt: 0, lastSnap: 0, lastRecv: 0, lagging: false, quitOpen: false, gone: false, pingTimer: null,
+      tot: { atk: 0, lines: 0, pieces: 0, time: 0 },
+    }, o);
+  }
+  function cleanupVs() {
+    if (!vs) return;
+    const v = vs;
+    vs = null;
+    clearInterval(v.pingTimer);
+    if (v.net) { try { v.net.send({ t: 'bye' }); } catch (_) { /* ignore */ } setTimeout(() => v.net.close(), 120); }
+    Snd.setBuild(false);
+    fx.missiles.length = 0;
+  }
+  function snapshot(g) {
+    const b = [];
+    for (let y = HIDDEN; y < H; y++) b.push(Array.from(g.board[y]));
+    if (g.cur && !g.over) {
+      const id = ID_TYPE.indexOf(g.cur.type);
+      for (const [x, y] of g.cellsOf(g.cur)) if (y >= HIDDEN && x >= 0 && x < W) b[y - HIDDEN][x] = id;
+    }
+    return b.map((r) => r.join('')).join('');
+  }
+
+  // ---------- 選單 ----------
+  function openVersus() {
+    cleanupVs();
+    $('vs-name').value = settings.name || '';
+    $('vs-name').classList.remove('need');
+    for (const b of $('vs-rounds').children) b.classList.toggle('on', +b.dataset.v === +settings.vsRounds);
+    showOverlay('versus');
+  }
+  function needName() {
+    if ((settings.name || '').trim()) return true;
+    const el = $('vs-name');
+    el.classList.add('need'); el.placeholder = '請先輸入暱稱'; el.focus();
+    return false;
+  }
+  function roomStatus(text, err) { const el = $('room-status'); el.textContent = text; el.classList.toggle('err', !!err); }
+  function updateRoom() {
+    if (!vs || vs.kind !== 'net') return;
+    $('room-title').textContent = vs.isHost ? '你的房間' : '加入房間';
+    $('room-code').textContent = vs.code || '';
+    $('room-share').classList.toggle('hidden', !(vs.isHost && vs.code));
+    const pl = $('room-players');
+    pl.innerHTML = '';
+    const row = (name, tag, empty) => {
+      const d = document.createElement('div');
+      if (empty) { d.className = 'empty'; d.textContent = name; } else { const sp = document.createElement('span'); sp.textContent = tag; d.append(name, sp); }
+      pl.append(d);
+    };
+    row(myName(), vs.isHost ? '你・房主' : '你');
+    if (vs.oppName) row(vs.oppName, `${vs.isHost ? '對手' : '房主'}${vs.rtt ? `・延遲 ${Math.round(vs.rtt)} ms` : ''}`);
+    else row(vs.isHost ? '等待對手加入…' : '連線中…', '', true);
+    $('room-info').textContent = `賽制：${ROUND_NAMES[vs.rounds] || ''}${vs.isHost ? '' : '（房主決定）'}`;
+    const st = $('room-start');
+    st.classList.toggle('hidden', !vs.isHost);
+    st.disabled = !(vs.net && vs.net.connected && vs.oppName);
+  }
+  function netHandlers(my) {
+    return {
+      connected: () => {
+        if (vs !== my) return;
+        my.gone = false; my.lastRecv = performance.now();
+        my.net.send({ t: 'hello', name: myName(), rounds: my.isHost ? my.rounds : 0 });
+        clearInterval(my.pingTimer);
+        my.pingTimer = setInterval(() => { if (my.net && my.net.connected) my.net.send({ t: 'ping', ts: performance.now() }); }, 1000);
+        roomStatus(my.isHost ? '對手已加入！按「開始比賽」' : '已連線，等待房主開始比賽…');
+        updateRoom();
+      },
+      data: (m) => { if (vs === my) onNetData(m); },
+      closed: () => { if (vs === my) onNetClosed(); },
+      error: (msg) => {
+        if (vs !== my) return;
+        if (mode === 'menu') roomStatus(msg, true);
+        else if (mode === 'vsdone') $('vr-note').textContent = msg;
+      },
+      unstable: () => { if (vs === my) my.lagging = true; },
+    };
+  }
+  async function createRoom() {
+    if (!needName()) return;
+    cleanupVs();
+    const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
+    const my = vs = newVs({ kind: 'net', isHost: true, rounds: +settings.vsRounds || 3, lpl: diff.linesPerLevel, gs: diff.gravityScale });
+    showOverlay('room'); updateRoom(); roomStatus('正在建立房間…');
+    my.net = new window.LumenNet.Net(netHandlers(my));
+    try {
+      const code = await my.net.host();
+      if (vs !== my) { my.net.close(); return; }
+      my.code = code;
+      roomStatus('把房號或邀請連結傳給朋友');
+      updateRoom();
+    } catch (e) { if (vs === my) roomStatus((e && e.message) || '建立房間失敗', true); }
+  }
+  async function joinRoom(code) {
+    if (!needName()) return;
+    code = String(code || '').replace(/\D/g, '');
+    if (code.length !== 4) { $('vs-code').focus(); return; }
+    cleanupVs();
+    const my = vs = newVs({ kind: 'net', isHost: false, code });
+    showOverlay('room'); updateRoom(); roomStatus(`正在連線到房間 ${code}…`);
+    my.net = new window.LumenNet.Net(netHandlers(my));
+    try {
+      await my.net.join(code);
+    } catch (e) {
+      if (vs !== my) return;
+      roomStatus((e && e.message) || '連線失敗', true);
+      my.net.close();
+    }
+  }
+  async function shareRoom() {
+    if (!vs || !vs.code) return;
+    const url = `${location.origin}${location.pathname}?room=${vs.code}`;
+    const text = `來跟我玩狗狗哇沙米光律方塊對戰！房號 ${vs.code}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: '狗狗哇沙米光律方塊', text, url }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(`${text}\n${url}`); roomStatus('已複製邀請連結'); } catch (_) { roomStatus(url); }
+  }
+  function startCpu(level) {
+    cleanupVs();
+    const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
+    vs = newVs({ kind: 'cpu', cpuLevel: level, rounds: +settings.vsRounds || 3, oppName: CPU_NAMES[level], lpl: diff.linesPerLevel, gs: diff.gravityScale });
+    beginMatch();
+  }
+
+  // ---------- 連線訊息 ----------
+  function onNetData(m) {
+    if (!m || typeof m !== 'object') return;
+    vs.lastRecv = performance.now();
+    vs.lagging = false;
+    switch (m.t) {
+      case 'hello':
+        vs.oppName = String(m.name || '對手').slice(0, 12);
+        if (!vs.isHost && ROUND_NAMES[m.rounds]) vs.rounds = m.rounds;
+        updateRoom();
+        break;
+      case 'round':
+        if (vs.isHost) break;
+        if (ROUND_NAMES[m.rounds]) vs.rounds = m.rounds;
+        vs.lpl = +m.lpl || 12; vs.gs = +m.gs || 0.55;
+        if (m.r === 1) { vs.wins = [0, 0]; vs.tot = { atk: 0, lines: 0, pieces: 0, time: 0 }; vs.matchOver = false; vs.myReady = vs.oppReady = false; }
+        vs.started = true;
+        startRound(m.r, m.seed >>> 0);
+        break;
+      case 'atk':
+        if (m.r === vs.round && game && !game.over && !vs.decided) game.receiveGarbage(Math.min(20, m.n | 0));
+        break;
+      case 'b':
+        if (typeof m.s === 'string') vs.opp = { s: m.s.slice(0, 200), p: m.p | 0, l: m.l | 0, a: m.a | 0, n: m.n | 0 };
+        break;
+      case 'dead':
+        if (vs.isHost && m.r === vs.round) roundDecided(true);
+        break;
+      case 'result':
+        if (vs.isHost || m.r !== vs.round || vs.decided) break;
+        vs.decided = true;
+        vs.wins = [m.wins[0] | 0, m.wins[1] | 0];
+        showRoundEnd(!m.hostWon, !!m.over);
+        break;
+      case 'rematch':
+        vs.oppReady = true;
+        updateResultBtn();
+        if (vs.isHost && vs.myReady) beginMatch();
+        break;
+      case 'ping': vs.net.send({ t: 'pong', ts: m.ts }); break;
+      case 'pong':
+        vs.rtt = vs.rtt ? vs.rtt * 0.7 + (performance.now() - m.ts) * 0.3 : performance.now() - m.ts;
+        if (mode === 'menu') updateRoom();
+        break;
+      case 'full': roomStatus('這個房間已經有兩個人了', true); break;
+      case 'bye': onNetClosed(); break;
+    }
+  }
+  function onNetClosed() {
+    if (!vs || vs.kind !== 'net' || vs.gone) return;
+    vs.gone = true;
+    clearInterval(vs.pingTimer);
+    if (vs.started && !vs.matchOver && mode !== 'menu') {
+      finishMatch(true, `${vs.oppName || '對手'} 已離線，你獲勝`);
+    } else if (mode === 'vsdone') {
+      $('vr-note').textContent = `${vs.oppName || '對手'} 已離開`;
+      updateResultBtn();
+    } else {
+      vs.oppName = null; vs.rtt = 0;
+      if (vs.isHost) roomStatus('對手離開了，等待新的對手加入…');
+      else roomStatus('和房主的連線中斷了', true);
+      updateRoom();
+    }
+  }
+
+  // ---------- 比賽流程 ----------
+  function beginMatch() {
+    vs.wins = [0, 0]; vs.tot = { atk: 0, lines: 0, pieces: 0, time: 0 };
+    vs.matchOver = false; vs.started = true; vs.myReady = vs.oppReady = false;
+    hostStartRound(1);
+  }
+  function hostStartRound(r) {
+    const seed = randSeed();
+    if (vs.kind !== 'net') { startRound(r, seed); return; }
+    vs.net.send({ t: 'round', r, seed, rounds: vs.rounds, lpl: vs.lpl, gs: vs.gs });
+    // 房主晚半個往返時間再開始，讓兩邊倒數大致同步
+    const delay = Math.min(250, (vs.rtt || 0) / 2);
+    const my = vs;
+    if (delay > 5) setTimeout(() => { if (vs === my) startRound(r, seed); }, delay);
+    else startRound(r, seed);
+  }
+  function startRound(r, seed) {
+    Object.assign(vs, { round: r, seed, decided: false, banner: null, oppDead: false, localDead: false, quitOpen: false, lastRecv: performance.now(), lagging: false });
+    vs.opp = { s: '', p: 0, l: 1, a: 0, n: 0 };
+    startGame({ versus: true, seed });
+    if (vs.kind === 'cpu') {
+      vs.oppGame = new E.Game({ seed, settings: Object.assign(vsGameSettings(), { das: 130, arr: 20, sdf: 20 }), onEvent: onCpuEvent });
+      vs.bot = new window.LumenBot.Bot(vs.oppGame, vs.cpuLevel);
+    }
+  }
+  function onCpuEvent(type, d) {
+    if (!vs || vs.kind !== 'cpu' || !game) return;
+    if (type === 'attack') { if (!game.over && !vs.decided) game.receiveGarbage(d.lines); } else if (type === 'gameOver') roundDecided(true);
+  }
+  function vsSendAttack(n) {
+    Snd.play('attack');
+    missile([bx + cell * 5, by + cell * 10], oppBoardCenter(), n, '#' + mix(accent, [255, 255, 255], 0.4).map((v) => (v | 0).toString(16).padStart(2, '0')).join(''), 0.5);
+    if (vs.kind === 'cpu') { if (vs.oppGame && !vs.oppGame.over) vs.oppGame.receiveGarbage(n); } else vs.net.send({ t: 'atk', n, r: vs.round });
+  }
+  function vsLocalDead() {
+    vs.localDead = true;
+    if (vs.kind === 'net') vs.net.send({ t: 'b', s: snapshot(game), p: 0, l: game.level, a: game.attackSent, n: game.lines });
+    if (vs.kind === 'cpu' || vs.isHost) roundDecided(false);
+    else vs.net.send({ t: 'dead', r: vs.round });
+  }
+  // 只有房主（或電腦對戰）會呼叫：決定這局勝負並通知對方
+  function roundDecided(iWon) {
+    if (!vs || vs.decided || mode === 'vsdone') return;
+    vs.decided = true;
+    vs.wins[iWon ? 0 : 1]++;
+    const over = vs.wins[0] >= needWins() || vs.wins[1] >= needWins();
+    if (vs.kind === 'net') vs.net.send({ t: 'result', r: vs.round, hostWon: iWon, wins: [vs.wins[1], vs.wins[0]], over });
+    showRoundEnd(iWon, over);
+  }
+  function addTotals() {
+    if (!game || vs.counted === vs.round) return;
+    vs.counted = vs.round;
+    vs.tot.atk += game.attackSent; vs.tot.lines += game.lines; vs.tot.pieces += game.pieces; vs.tot.time += game.time;
+  }
+  function showRoundEnd(iWon, over) {
+    addTotals();
+    mode = 'vsround';
+    vs.banner = { win: iWon, t: 0, over, next: false };
+    vs.oppDead = iWon;
+    input.releaseAll();
+    Snd.setBuild(false); Snd.setBoost(0);
+    if (iWon) {
+      Snd.play('win');
+      fx.rings.push({ t: 0, life: 1.2 });
+      fx.flash = Math.max(fx.flash, 0.3);
+      fx.pulse = 1;
+      fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.2, s: 1 });
+    }
+  }
+  function finishMatch(forcedWin, note) {
+    if (!vs) return;
+    if (game && vs.counted !== vs.round) addTotals();
+    vs.matchOver = true;
+    vs.quitOpen = false;
+    mode = 'vsdone';
+    const win = forcedWin != null ? forcedWin : vs.wins[0] > vs.wins[1];
+    const t = $('vr-title');
+    t.textContent = win ? '你贏了！' : '你輸了';
+    t.className = win ? 'win' : 'lose';
+    $('vr-note').textContent = note || `${ROUND_NAMES[vs.rounds]}・對手 ${vs.oppName || ''}`;
+    const sc = $('vr-score');
+    sc.innerHTML = '';
+    const sp = (txt) => { const e = document.createElement('span'); e.textContent = txt; return e; };
+    const bb = document.createElement('b'); bb.textContent = `${vs.wins[0]} : ${vs.wins[1]}`;
+    sc.append(sp(myName()), bb, sp(vs.oppName || '對手'));
+    const secs = vs.tot.time / 1000;
+    $('vr-stats').innerHTML = [
+      ['送出攻擊', vs.tot.atk], ['消除行數', vs.tot.lines], ['方塊數', vs.tot.pieces], ['每秒方塊', (vs.tot.pieces / Math.max(secs, 1)).toFixed(2)],
+    ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
+    Snd.play(win ? 'win' : 'ui');
+    touchEl.classList.add('hidden');
+    showOverlay('vsresult');
+    updateResultBtn();
+    releaseWake();
+  }
+  function updateResultBtn() {
+    if (!vs) return;
+    const b = $('vr-again');
+    if (vs.kind === 'cpu') { b.disabled = false; b.textContent = '再來一場'; return; }
+    const ok = vs.net && vs.net.connected && !vs.gone;
+    b.disabled = !ok || vs.myReady;
+    b.textContent = !ok ? '對手已離開' : vs.myReady ? '等待對手…' : vs.oppReady ? '再來一場（對手已準備）' : '再來一場';
+  }
+  function rematch() {
+    if (!vs) return;
+    if (vs.kind === 'cpu') { beginMatch(); return; }
+    if (!vs.net || !vs.net.connected) return;
+    vs.myReady = true;
+    vs.net.send({ t: 'rematch' });
+    updateResultBtn();
+    if (vs.isHost && vs.oppReady) beginMatch();
+  }
+  function toggleVsQuit() {
+    if (!vs) return;
+    vs.quitOpen = !vs.quitOpen;
+    input.releaseAll();
+    showOverlay(vs.quitOpen ? 'vsquit' : null);
+  }
+  function updateVs(dt) {
+    if (!vs) return;
+    const now = performance.now();
+    if (vs.kind === 'cpu' && vs.oppGame) {
+      const g = vs.oppGame;
+      if (mode === 'playing') { g.update(dt); vs.bot.update(dt); }
+      vs.opp = { s: snapshot(g), p: g.pendingGarbage(), l: g.level, a: g.attackSent, n: g.lines };
+    }
+    if (vs.kind === 'net' && vs.net && vs.net.connected && game && (mode === 'playing' || mode === 'countdown') && !game.over && now - vs.lastSnap > 90) {
+      vs.lastSnap = now;
+      vs.net.send({ t: 'b', s: snapshot(game), p: game.pendingGarbage(), l: game.level, a: game.attackSent, n: game.lines });
+    }
+    if (vs.kind === 'net' && vs.started && !vs.matchOver && !vs.gone) {
+      const quiet = now - vs.lastRecv;
+      if (quiet > 2500) vs.lagging = true;
+      if (quiet > 12000) { onNetClosed(); vs && vs.net && vs.net.close(); }
+    }
+    if (mode === 'vsround' && vs.banner) {
+      vs.banner.t += dt / 1000;
+      if (vs.banner.t >= 3.2 && !vs.banner.next) {
+        vs.banner.next = true;
+        if (vs.banner.over) finishMatch();
+        else if (vs.kind === 'cpu' || vs.isHost) hostStartRound(vs.round + 1);
+      }
+    }
+  }
+
+  // ---------- 對戰畫面 ----------
+  function oppGeom() {
+    const x = bx - gap - sideW, y = by + cell * 3.6, w = sideW;
+    const mc = (sideW - cell * 0.5) / 10;
+    return { x, y, w, h: cell * 1.8 + mc * VIS, mc, ox: x + (w - mc * 10) / 2, oy: y + cell * 0.9 };
+  }
+  function oppBoardCenter() { const o = oppGeom(); return [o.ox + o.mc * 5, o.oy + o.mc * VIS / 2]; }
+  function meterTop() { return [bx - gap / 2, by + cell * VIS - Math.min(VIS, game ? game.pendingGarbage() : 0) * cell]; }
+  function missile(from, to, n, color, life) {
+    fx.missiles.push({ x0: from[0], y0: from[1], x1: to[0], y1: to[1], n, color, t: 0, life, bend: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.25) });
+  }
+  function drawMissiles() {
+    if (!fx.missiles.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const m of fx.missiles) {
+      const dx = m.x1 - m.x0, dy = m.y1 - m.y0;
+      const cxp = (m.x0 + m.x1) / 2 - dy * m.bend, cyp = (m.y0 + m.y1) / 2 + dx * m.bend;
+      const at = (k) => [(1 - k) * (1 - k) * m.x0 + 2 * (1 - k) * k * cxp + k * k * m.x1, (1 - k) * (1 - k) * m.y0 + 2 * (1 - k) * k * cyp + k * k * m.y1];
+      const k = ease(m.t / m.life);
+      const r = cell * (0.22 + 0.05 * Math.min(m.n, 8));
+      const c = hex(m.color);
+      for (let i = 10; i >= 0; i--) {
+        const kk = Math.max(0, k - i * 0.025);
+        const [px, py] = at(kk);
+        const a = (1 - i / 11) * 0.8;
+        ctx.fillStyle = rgb(c, a);
+        ctx.beginPath(); ctx.arc(px, py, r * (1 - i / 14), 0, Math.PI * 2); ctx.fill();
+      }
+      const [hx, hy] = at(k);
+      const rg = ctx.createRadialGradient(hx, hy, 0, hx, hy, r * 3);
+      rg.addColorStop(0, 'rgba(255,255,255,0.95)'); rg.addColorStop(0.3, rgb(c, 0.6)); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = rg; ctx.fillRect(hx - r * 3, hy - r * 3, r * 6, r * 6);
+    }
+    ctx.restore();
+  }
+  function drawGarbageMeter() {
+    const p = game.pendingGarbage();
+    const x = bx - gap + cell * 0.08, w = Math.max(3, gap - cell * 0.16 - 2), bot = by + cell * VIS;
+    ctx.fillStyle = 'rgba(2,4,18,0.6)';
+    ctx.fillRect(x, by, w, cell * VIS);
+    if (p <= 0) return;
+    const hh = Math.min(VIS, p) * cell;
+    const blink = p >= 6 ? 0.65 + 0.35 * Math.sin(performance.now() / 70) : 1;
+    ctx.save();
+    ctx.shadowColor = '#ff3050'; ctx.shadowBlur = cell * 0.6;
+    const gr = ctx.createLinearGradient(0, bot - hh, 0, bot);
+    gr.addColorStop(0, `rgba(255,120,120,${blink})`); gr.addColorStop(1, `rgba(255,40,70,${blink})`);
+    ctx.fillStyle = gr;
+    ctx.fillRect(x, bot - hh, w, hh);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    for (let i = 1; i < Math.min(VIS, p); i++) ctx.fillRect(x, bot - i * cell, w, 1);
+  }
+  function drawVsHud(lx, rx) {
+    const dim = 'rgba(200,210,245,0.75)';
+    const o = oppGeom();
+    panelBox(o.x, o.y, o.w, o.h);
+    fitLabel(vs.oppName || '對手', o.x + o.w / 2, o.y + cell * 0.46, o.w - cell * 0.3, cell * 0.42, '#ffb3c0', 'center');
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(o.ox, o.oy, o.mc * 10, o.mc * VIS);
+    const str = vs.opp.s || '';
+    for (let i = 0; i < str.length && i < W * VIS; i++) {
+      const id = str.charCodeAt(i) - 48;
+      if (id <= 0 || id > 8) continue;
+      ctx.fillStyle = COLORS[ID_TYPE[id]];
+      ctx.fillRect(o.ox + (i % W) * o.mc + 0.5, o.oy + ((i / W) | 0) * o.mc + 0.5, o.mc - 1, o.mc - 1);
+    }
+    ctx.strokeStyle = 'rgba(255,180,200,0.35)'; ctx.lineWidth = 1;
+    ctx.strokeRect(o.ox - 0.5, o.oy - 0.5, o.mc * 10 + 1, o.mc * VIS + 1);
+    if (vs.opp.p > 0) {
+      const hh = Math.min(VIS, vs.opp.p) * o.mc;
+      ctx.fillStyle = '#ff4060';
+      ctx.fillRect(o.ox - Math.max(2, cell * 0.12), o.oy + o.mc * VIS - hh, Math.max(2, cell * 0.09), hh);
+    }
+    if (vs.oppDead) {
+      ctx.fillStyle = 'rgba(20,0,10,0.6)'; ctx.fillRect(o.ox, o.oy, o.mc * 10, o.mc * VIS);
+      label('KO', o.ox + o.mc * 5, o.oy + o.mc * VIS / 2, cell * 0.9, '#ff6b7a', 'center', 900);
+    } else if (vs.lagging && vs.kind === 'net') {
+      label('連線不穩…', o.ox + o.mc * 5, o.oy + o.mc * VIS / 2, cell * 0.36, '#ffd27a', 'center', 700);
+    }
+    label(`LV ${vs.opp.l || 1}・${vs.opp.n || 0} 行`, o.x + o.w / 2, o.y + o.h - cell * 0.45, cell * 0.34, dim, 'center');
+    [['LEVEL', String(game.level)], ['LINES', String(game.lines)]].forEach(([k, v], i) => {
+      const y = by + cell * (11.5 + i * 2.5);
+      panelBox(lx, y, sideW, cell * 2.1);
+      label(k, lx + sideW / 2, y + cell * 0.5, cell * 0.38, dim, 'center');
+      fitLabel(v, lx + sideW / 2, y + cell * 1.3, sideW - cell * 0.4, cell * 0.85, '#fff', 'center');
+    });
+    const sy = by + cell * 15;
+    panelBox(rx, sy, sideW, cell * 5);
+    label(vs.rounds > 1 ? `第 ${vs.round} 局` : '一局決勝', rx + sideW / 2, sy + cell * 0.5, cell * 0.36, dim, 'center');
+    fitLabel(myName(), rx + sideW / 2, sy + cell * 1.35, sideW - cell * 0.3, cell * 0.4, '#8be9ff', 'center');
+    label(`${vs.wins[0]} : ${vs.wins[1]}`, rx + sideW / 2, sy + cell * 2.45, cell * 0.95, '#fff', 'center', 800);
+    fitLabel(vs.oppName || '對手', rx + sideW / 2, sy + cell * 3.55, sideW - cell * 0.3, cell * 0.4, '#ffb3c0', 'center');
+    label(`攻擊 ${game.attackSent}`, rx + sideW / 2, sy + cell * 4.45, cell * 0.34, dim, 'center');
+  }
+  function drawRoundBanner() {
+    const b = vs.banner;
+    const k = Math.min(1, b.t / 0.4);
+    ctx.fillStyle = `rgba(0,0,10,${0.55 * k})`;
+    ctx.fillRect(bx, by, cell * 10, cell * VIS);
+    const cx = bx + cell * 5, cy = by + cell * 7.5;
+    label(vs.rounds > 1 ? `第 ${vs.round} 局` : '一局決勝', cx, cy - cell * 2.3, cell * 0.6, 'rgba(220,228,255,0.9)', 'center', 700);
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.translate(cx, cy);
+    const sc = 1.5 - 0.5 * ease(b.t / 0.5);
+    ctx.scale(sc, sc);
+    ctx.shadowColor = b.win ? '#ffd860' : '#6f86ff'; ctx.shadowBlur = cell * 1.2;
+    label(b.win ? '勝利' : '落敗', 0, 0, cell * 2.2, b.win ? '#ffe98a' : '#b5c2ff', 'center', 900);
+    ctx.restore();
+    const nw = needWins();
+    const rows = [[myName(), vs.wins[0], '#8be9ff'], [vs.oppName || '對手', vs.wins[1], '#ffb3c0']];
+    rows.forEach(([name, w, col], i) => {
+      const y = cy + cell * (2.6 + i * 1.3);
+      fitLabel(name, bx + cell * 4.6, y, cell * 4, cell * 0.5, col, 'right');
+      for (let j = 0; j < nw; j++) {
+        const dx = bx + cell * (5.4 + j * 0.9);
+        ctx.beginPath(); ctx.arc(dx, y, cell * 0.28, 0, Math.PI * 2);
+        if (j < w) { ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = cell * 0.5; ctx.fill(); ctx.shadowBlur = 0; } else { ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+      }
+    });
+    const msg = b.over ? '比賽結束' : (b.t > 3.2 && vs.kind === 'net' && !vs.isHost ? '等待房主…' : '下一局即將開始');
+    label(msg, cx, cy + cell * 5.6, cell * 0.5, 'rgba(220,228,255,0.85)', 'center', 600);
+  }
+
   // ================= 過關過場 =================
   // 時間軸（秒）：0 光帶掃過＋LEVEL CLEAR 逐字飛入 → 0.6 成績 → 1.6 超空間隧道 → 2.7 白光抵達、
   // 新場景光圈擴散 → 3.1 場景名逐字浮現、光芒旋轉、副標打字 → 5.0 READY → 5.45 GO! → 5.9 結束
@@ -1009,7 +1550,7 @@
     panelBox(lx, by, sideW, cell * 3.2);
     label('HOLD', lx + sideW / 2, by + cell * 0.55, cell * 0.42, dim, 'center');
     if (game.hold) drawPreview(game.hold, lx + sideW / 2, by + cell * 2.05, cell * 0.62, game.canHold ? 1 : 0.35);
-    const stats = [['SCORE', game.score.toLocaleString()], ['LEVEL', String(game.level)], ['LINES', String(game.lines)]];
+    const stats = vs ? [] : [['SCORE', game.score.toLocaleString()], ['LEVEL', String(game.level)], ['LINES', String(game.lines)]];
     stats.forEach(([k, v], i) => {
       const y = by + cell * (3.9 + i * 2.5);
       panelBox(lx, y, sideW, cell * 2.1);
@@ -1026,6 +1567,7 @@
     let y = by + cell * 13;
     if (game.combo > 0) { label(`${game.combo} COMBO`, rx + sideW / 2, y + cell * 0.5, cell * 0.55, '#8be9ff', 'center', 800); y += cell * 1.2; }
     if (game.b2b) label('B2B', rx + sideW / 2, y + cell * 0.5, cell * 0.55, '#ffe98a', 'center', 800);
+    if (vs) drawVsHud(lx, rx);
   }
 
   function drawEffects() {
@@ -1127,7 +1669,9 @@
     ctx.restore();
     drawEffects();
     drawHud();
+    if (vs) { drawGarbageMeter(); drawMissiles(); }
     if (mode === 'countdown') drawCountdown();
+    if (vs && mode === 'vsround' && vs.banner) drawRoundBanner();
     if (tr && (mode === 'transition' || mode === 'paused')) drawTransition();
     if (mode === 'over') {
       ctx.fillStyle = `rgba(30,0,10,${overFade * 0.55})`;
@@ -1161,6 +1705,7 @@
       overDelay -= dt / 1000;
       if (overDelay <= 0 && !overShown) { overShown = true; finishGame(); }
     }
+    updateVs(dt);
     const bi = Snd.beatInfo();
     beat = bi.playing ? Math.exp(-bi.phase * 5) * (bi.drums ? 1 : 0.55) : 0;
     updateTheme(dt);
@@ -1314,7 +1859,24 @@
     layout(); applyCustomPad(); syncSizeSliders();
   });
   $('pe-done').addEventListener('click', () => { Snd.play('ui'); closePadEditor(); });
-  $('btn-start').addEventListener('click', ui(startGame));
+  $('btn-start').addEventListener('click', ui(() => startGame()));
+  $('btn-versus').addEventListener('click', ui(openVersus));
+  $('vs-name').addEventListener('input', (e) => { settings.name = e.target.value.trim().slice(0, 12); e.target.classList.remove('need'); saveSettings(); });
+  for (const b of $('vs-rounds').children) {
+    b.addEventListener('click', ui(() => { settings.vsRounds = +b.dataset.v; saveSettings(); for (const x of $('vs-rounds').children) x.classList.toggle('on', x === b); }));
+  }
+  for (const b of $('vs-cpu').children) b.addEventListener('click', ui(() => startCpu(b.dataset.cpu)));
+  $('vs-create').addEventListener('click', ui(createRoom));
+  $('vs-join').addEventListener('click', ui(() => joinRoom($('vs-code').value)));
+  $('vs-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom($('vs-code').value); });
+  $('vs-back').addEventListener('click', ui(() => showOverlay('menu')));
+  $('room-share').addEventListener('click', ui(shareRoom));
+  $('room-start').addEventListener('click', ui(() => { if (vs && vs.isHost && vs.net && vs.net.connected) beginMatch(); }));
+  $('room-cancel').addEventListener('click', ui(openVersus));
+  $('vr-again').addEventListener('click', ui(rematch));
+  $('vr-quit').addEventListener('click', ui(toMenu));
+  $('vq-stay').addEventListener('click', ui(toggleVsQuit));
+  $('vq-leave').addEventListener('click', ui(toMenu));
   $('btn-settings').addEventListener('click', ui(() => { settingsReturn = 'menu'; buildSettings(); showOverlay('settings'); }));
   $('btn-pause-settings').addEventListener('click', ui(() => { settingsReturn = 'pause'; buildSettings(); showOverlay('settings'); }));
   $('btn-settings-back').addEventListener('click', ui(() => { input.rebinding = null; showOverlay(settingsReturn); }));
@@ -1324,11 +1886,11 @@
   $('btn-help').addEventListener('click', ui(() => showOverlay('help')));
   $('btn-help-back').addEventListener('click', ui(() => showOverlay('menu')));
   $('btn-resume').addEventListener('click', ui(resumeGame));
-  $('btn-restart').addEventListener('click', ui(startGame));
+  $('btn-restart').addEventListener('click', ui(() => { if (vs && vs.kind === 'cpu') beginMatch(); else startGame(); }));
   $('btn-quit').addEventListener('click', ui(toMenu));
-  $('btn-again').addEventListener('click', ui(startGame));
+  $('btn-again').addEventListener('click', ui(() => startGame()));
   $('btn-over-quit').addEventListener('click', ui(toMenu));
-  pauseBtn.addEventListener('click', () => { ensureAudio(); pauseGame(); });
+  pauseBtn.addEventListener('click', () => { ensureAudio(); if (vs && vs.kind === 'net') toggleVsQuit(); else pauseGame(); });
   $('btn-fs').addEventListener('click', ui(async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -1340,8 +1902,8 @@
   }));
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      if (mode === 'playing') pauseGame();
-      Snd.suspend();
+      if (mode === 'playing' && !(vs && vs.kind === 'net')) pauseGame();
+      if (!(vs && vs.kind === 'net' && vs.started && !vs.matchOver)) Snd.suspend();
       releaseWake();
     } else {
       if (audioStarted) Snd.resume();
@@ -1365,9 +1927,21 @@
   setTheme(0, true);
   requestAnimationFrame((ts) => { last = ts; frame(ts); });
 
+  // 邀請連結 ?room=1234：直接帶到對戰畫面並填好房號
+  {
+    const q = new URLSearchParams(location.search);
+    const code = (q.get('room') || '').replace(/\D/g, '');
+    if (code.length === 4) {
+      openVersus();
+      $('vs-code').value = code;
+      q.delete('room');
+      try { history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '')); } catch (_) { /* ignore */ }
+    }
+  }
+
   // 供自動測試使用
   window.__lumen = {
-    get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings,
+    get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings, get vs() { return vs; }, startCpu,
     setTheme: (i) => { setTheme(i, true); }, get themeIdx() { return themeIdx; }, get post() { return post; },
   };
 })();

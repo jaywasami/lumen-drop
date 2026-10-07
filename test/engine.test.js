@@ -332,4 +332,65 @@ test('起始等級 > 1 時，第一關沒有獎勵', () => {
   assert.equal(g.rewardMul(), 1);
 });
 
+test('對戰攻擊表', () => {
+  const { attackFor } = require('../engine.js');
+  assert.equal(attackFor(1, false, false, false, 0, false), 0);
+  assert.equal(attackFor(2, false, false, false, 0, false), 1);
+  assert.equal(attackFor(3, false, false, false, 0, false), 2);
+  assert.equal(attackFor(4, false, false, false, 0, false), 4);
+  assert.equal(attackFor(4, false, false, true, 0, false), 5); // B2B +1
+  assert.equal(attackFor(2, true, false, false, 0, false), 4); // TSD
+  assert.equal(attackFor(1, true, true, false, 0, false), 0); // T-Spin mini single
+  assert.equal(attackFor(1, false, false, false, 4, false), 2); // 第 5 連 combo
+  assert.equal(attackFor(4, false, false, false, 0, true), 14); // PC
+});
+
+test('Tetris 送出 4 行攻擊', () => {
+  const g = new Game({ seed: 5 });
+  setBottom(g, ['####......'].concat(Array(4).fill('#########.')));
+  put(g, 'I', 1, 7, 30);
+  const ev = events(g);
+  g.press('hardDrop');
+  const at = ev.find((e) => e[0] === 'attack');
+  assert.ok(at); assert.equal(at[1].lines, 4);
+});
+
+test('垃圾行：沒消行時從底部頂上，缺口同欄', () => {
+  const g = new Game({ seed: 5 });
+  setBottom(g, []);
+  g.receiveGarbage(3);
+  assert.equal(g.pendingGarbage(), 3);
+  put(g, 'O', 0, 3, 10);
+  g.press('hardDrop');
+  assert.equal(g.pendingGarbage(), 0);
+  const rows = [g.board[H - 1], g.board[H - 2], g.board[H - 3]];
+  for (const r of rows) assert.equal(r.filter((v) => v === 0).length, 1);
+  const hole = rows[0].indexOf(0);
+  assert.ok(rows.every((r) => r.indexOf(0) === hole));
+  assert.ok(g.board[H - 4].some((v) => v)); // O 方塊被墊高
+});
+
+test('垃圾行：消行可以抵銷排隊中的垃圾', () => {
+  const g = new Game({ seed: 5 });
+  g.receiveGarbage(3);
+  setBottom(g, ['####......'].concat(Array(4).fill('#########.')));
+  put(g, 'I', 1, 7, 30);
+  const ev = events(g);
+  g.press('hardDrop');
+  assert.equal(g.pendingGarbage(), 0);
+  assert.equal(ev.find((e) => e[0] === 'attack')[1].lines, 1); // 4 - 3
+});
+
+test('垃圾行把方塊頂出頂部 → 遊戲結束', () => {
+  const g = new Game({ seed: 5 });
+  setBottom(g, []);
+  g.board[0][0] = 1; // 最頂端（隱藏區最上方）已有方塊
+  g.receiveGarbage(1);
+  put(g, 'O', 0, 3, 30);
+  const ev = events(g);
+  g.press('hardDrop');
+  assert.equal(g.over, true);
+  assert.equal(ev.find((e) => e[0] === 'gameOver')[1].reason, 'garbage');
+});
+
 console.log(`\n${passed} passed`);

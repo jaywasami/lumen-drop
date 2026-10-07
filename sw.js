@@ -1,6 +1,6 @@
 // 網路優先、離線時使用快取，確保更新後一定拿到新版
-const CACHE = 'lumen-drop-v12';
-const FILES = ['./', 'index.html', 'style.css', 'engine.js', 'audio.js', 'scenes.js', 'post.js', 'input.js', 'main.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'lumen-drop-v13';
+const FILES = ['./', 'index.html', 'style.css', 'engine.js', 'audio.js', 'scenes.js', 'post.js', 'input.js', 'bot.js', 'net.js', 'main.js', 'icon.svg', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

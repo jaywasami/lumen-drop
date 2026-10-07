@@ -144,3 +144,33 @@ body.post-on #c { opacity: 0; }
 .pe-sl label span { color: var(--accent); }
 .pe-sl input[type=range] { width: 100%; height: 26px; accent-color: var(--accent); }
 .pe-row { margin-top: 6px; }
+
+/* 對戰 */
+.panel button.vs-btn { background: linear-gradient(135deg, #ff5d8f, #ff9a3d); box-shadow: 0 0 22px rgba(255, 110, 120, 0.45); }
+.panel input.txt {
+  width: 100%; appearance: none; font: inherit; font-size: 18px; padding: 12px 14px; border-radius: 12px; color: var(--fg);
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.22); outline: none; text-align: center;
+  -webkit-user-select: text; user-select: text; touch-action: manipulation;
+}
+.panel input.txt:focus { border-color: var(--accent); box-shadow: 0 0 12px rgba(110, 231, 255, 0.35); }
+.join-row { display: flex; gap: 8px; }
+.join-row input.txt { flex: 1; letter-spacing: 6px; }
+.join-row button { flex: 0 0 auto; }
+.hint { margin: 0; font-size: 13px; line-height: 1.6; color: var(--dim); }
+.room-code { font-size: 54px; font-weight: 800; letter-spacing: 12px; padding-left: 12px; color: #fff; text-shadow: 0 0 24px var(--accent); font-variant-numeric: tabular-nums; }
+.room-code:empty { display: none; }
+.room-status { margin: 0; font-size: 15px; color: #cfd5f5; min-height: 1.4em; }
+.room-status.err { color: #ff8a8a; }
+.room-players { display: flex; flex-direction: column; gap: 6px; }
+.room-players div { display: flex; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); font-size: 15px; }
+.room-players div span { color: var(--dim); }
+.room-players div.empty { color: var(--dim); justify-content: center; }
+.panel button:disabled { opacity: 0.4; }
+.vs-score { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 15px; color: #cfd5f5; }
+.vs-score b { font-size: 44px; color: #fff; font-variant-numeric: tabular-nums; }
+.vs-score span { max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#vr-title.win { color: #ffe98a; text-shadow: 0 0 22px rgba(255, 220, 120, 0.8); }
+#vr-title.lose { color: #9fb0ff; }
+.panel input.txt.need { border-color: #ff8a8a; box-shadow: 0 0 12px rgba(255, 120, 120, 0.4); }
+.panel input.txt.need::placeholder { color: #ff9a9a; }
+.join-row input.txt:placeholder-shown { letter-spacing: 1px; }

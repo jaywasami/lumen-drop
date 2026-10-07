@@ -971,6 +971,26 @@
         case 'ui':
           this.synth({ t: now, f: mtof(tone(2, 2)), waves: [['sine', 0, 1]], d: 0.08, peak: 0.05, out, wet: 0.2 });
           break;
+        case 'attack':
+          // 發射攻擊：上揚的掃頻光束
+          this.noise({ t: now, ftype: 'bandpass', freq: 600, freqEnd: 6000, sweep: 0.25, q: 2, d: 0.3, peak: 0.07, out, wet: 0.4 });
+          this.synth({ t: now, f: mtof(tone(0, 1)), pitchFrom: 0.5, glide: 0.18, waves: [['sawtooth', 0, 0.4]], cut: 2500, d: 0.3, peak: 0.05, out, wet: 0.4 });
+          break;
+        case 'warn':
+          // 垃圾行來襲：低沉警告雙音
+          [0, 0.16].forEach((dt) => this.synth({ t: now + dt, f: mtof(52), waves: [['square', 0, 0.5]], cut: 900, d: 0.14, peak: 0.06, out }));
+          break;
+        case 'garbage':
+          // 垃圾行頂上來：沉重撞擊
+          this.synth({ t: now, f: 38, pitchFrom: 2.5, glide: 0.25, waves: [['sine', 0, 1]], d: 0.5, peak: 0.6, out });
+          this.noise({ t: now, freq: 900, d: 0.18, peak: 0.12, out });
+          this.drum('tom', now, 0.9, out);
+          break;
+        case 'win':
+          [0, 2, 4, 7].forEach((i, k) => this.synth({ t: now + k * 0.09, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.7], ['triangle', 0, 0.25, 2]], d: 1.2, peak: 0.08, out, wet: 0.7 }));
+          this.drum('crash', now + 0.3, 1.1, out);
+          this.drum('taikoBig', now, 1, out);
+          break;
       }
     },
   };
