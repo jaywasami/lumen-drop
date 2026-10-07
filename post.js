@@ -60,6 +60,8 @@ uniform float uBloom;
 uniform float uAberr;
 uniform float uVig;
 uniform float uFlash;
+uniform float uGrain;
+uniform float uTime;
 uniform vec2 uAspect;
 uniform vec4 uW0;
 uniform vec4 uW1;
@@ -90,6 +92,8 @@ void main() {
   float v = smoothstep(1.05, 0.35, length((vUv - 0.5) * vec2(1.1, 0.95)));
   col *= mix(1.0, v, uVig);
   col = mix(col, vec3(1.0), uFlash);
+  float n = fract(sin(dot(gl_FragCoord.xy + uTime * 61.0, vec2(12.9898, 78.233))) * 43758.5453);
+  col += (n - 0.5) * uGrain;
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -108,7 +112,7 @@ void main() {
         bright: this.program(BRIGHT, ['uTex', 'uTexel', 'uThr']),
         blur: this.program(BLUR, ['uTex', 'uDir']),
         copy: this.program(COPY, ['uTex', 'uTexel']),
-        comp: this.program(COMPOSITE, ['uScene', 'uBloom1', 'uBloom2', 'uBloom', 'uAberr', 'uVig', 'uFlash', 'uAspect', 'uW0', 'uW1', 'uW2']),
+        comp: this.program(COMPOSITE, ['uScene', 'uBloom1', 'uBloom2', 'uBloom', 'uAberr', 'uVig', 'uFlash', 'uGrain', 'uTime', 'uAspect', 'uW0', 'uW1', 'uW2']),
       };
       this.src = this.texture();
       this.w = 0; this.h = 0;
@@ -221,6 +225,8 @@ void main() {
         gl.uniform1f(u.uAberr, p.aberr || 0);
         gl.uniform1f(u.uVig, p.vig || 0);
         gl.uniform1f(u.uFlash, p.flash || 0);
+        gl.uniform1f(u.uGrain, p.grain || 0);
+        gl.uniform1f(u.uTime, (performance.now() / 1000) % 100);
         gl.uniform2f(u.uAspect, this.w / this.h, 1);
         ['uW0', 'uW1', 'uW2'].forEach((n, i) => {
           const w = waves[i];

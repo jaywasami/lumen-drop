@@ -30,6 +30,19 @@
     g.fillRect(x - r, y - r, r * 2, r * 2);
   }
 
+  // 鏡頭失焦光斑：中心柔、邊緣一圈略亮
+  function bokehSprite(color) {
+    const S = layer(64, 64);
+    const gr = S.g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, `rgba(${color},0.55)`);
+    gr.addColorStop(0.7, `rgba(${color},0.45)`);
+    gr.addColorStop(0.86, `rgba(${color},0.7)`);
+    gr.addColorStop(1, `rgba(${color},0)`);
+    S.g.fillStyle = gr;
+    S.g.fillRect(0, 0, 64, 64);
+    return S;
+  }
+
   // =========================================================
   // 0 星空：星雲 + 向外飛行的星點（消行時曲速）
   // =========================================================
@@ -112,54 +125,67 @@
   }
 
   // =========================================================
-  // 1 深海：光束、氣泡、海雪、隨節拍收縮的水母
+  // 1 深海：光束、景深光斑、海雪、半透明發光水母
   // =========================================================
+  const JELLY_COLS = ['140,220,255', '205,150,255', '255,160,215', '150,255,215'];
   class DeepSea {
-    constructor(low) { this.low = low; this.flash = 0; }
+    constructor(low) { this.low = low; this.flash = 0; this.beat = 0; }
     resize(w, h) {
       this.w = w; this.h = h;
       const L = (this.bg = layer(w, h));
       const g = L.g;
-      g.fillStyle = vgrad(g, h, [[0, '#0b5578'], [0.35, '#073452'], [0.75, '#03172b'], [1, '#010812']]);
+      g.fillStyle = vgrad(g, h, [[0, '#0b5578'], [0.3, '#073452'], [0.7, '#03172b'], [1, '#010812']]);
       g.fillRect(0, 0, w, h);
-      glow(g, w * 0.5, -h * 0.1, w * 0.9, '120,220,255', 0.18);
-      // 海床
+      glow(g, w * 0.45, -h * 0.1, w * 1.0, '120,220,255', 0.2);
+      // 水面波光
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 60; i++) {
+        g.fillStyle = `rgba(180,240,255,${rand(0.02, 0.07)})`;
+        g.beginPath(); g.ellipse(rand(0, w), rand(0, h * 0.08), rand(10, 40), rand(1, 3), 0, 0, TAU); g.fill();
+      }
+      g.globalCompositeOperation = 'source-over';
+      // 海床：岩石與珊瑚剪影
       g.fillStyle = '#010610';
       g.beginPath(); g.moveTo(0, h);
-      for (let x = 0; x <= w + 20; x += 20) g.lineTo(x, h * 0.9 - Math.abs(Math.sin(x * 0.013)) * h * 0.05 - Math.sin(x * 0.041) * h * 0.012);
+      for (let x = 0; x <= w + 20; x += 14) g.lineTo(x, h * 0.9 - Math.abs(Math.sin(x * 0.013)) * h * 0.05 - Math.sin(x * 0.041) * h * 0.012);
       g.lineTo(w, h); g.closePath(); g.fill();
+      g.strokeStyle = '#010711'; g.lineCap = 'round';
+      for (let i = 0; i < 7; i++) {
+        const x0 = rand(0, w), y0 = h * rand(0.88, 0.94);
+        const coral = (x, y, a, len, wd, d) => {
+          if (d <= 0) return;
+          const x1 = x + Math.cos(a) * len, y1 = y + Math.sin(a) * len;
+          g.lineWidth = wd; g.beginPath(); g.moveTo(x, y); g.lineTo(x1, y1); g.stroke();
+          coral(x1, y1, a - rand(0.2, 0.5), len * 0.7, wd * 0.7, d - 1);
+          coral(x1, y1, a + rand(0.2, 0.5), len * 0.7, wd * 0.7, d - 1);
+        };
+        coral(x0, y0, -Math.PI / 2 + rand(-0.2, 0.2), rand(14, 26), 4, 4);
+      }
       // 光束素材
       const ray = (this.ray = layer(120, 600));
       const rg = ray.g;
       const gr = rg.createLinearGradient(0, 0, 0, 600);
-      gr.addColorStop(0, 'rgba(170,240,255,0.55)'); gr.addColorStop(1, 'rgba(170,240,255,0)');
+      gr.addColorStop(0, 'rgba(170,240,255,0.5)'); gr.addColorStop(0.6, 'rgba(170,240,255,0.12)'); gr.addColorStop(1, 'rgba(170,240,255,0)');
       rg.fillStyle = gr;
-      rg.beginPath(); rg.moveTo(40, 0); rg.lineTo(80, 0); rg.lineTo(120, 600); rg.lineTo(0, 600); rg.closePath(); rg.fill();
+      rg.beginPath(); rg.moveTo(45, 0); rg.lineTo(75, 0); rg.lineTo(120, 600); rg.lineTo(0, 600); rg.closePath(); rg.fill();
       this.rays = [];
-      for (let i = 0; i < 6; i++) this.rays.push({ x: rand(-0.1, 1.1), w: rand(0.6, 1.6), a: rand(0.08, 0.18), ph: rand(0, TAU), sp: rand(0.2, 0.5) });
-      // 水母素材
-      this.jellyImg = {};
-      for (const [key, col] of [['c', '120,230,255'], ['p', '210,140,255'], ['k', '255,150,210']]) {
-        const J = layer(80, 60);
-        const jg = J.g;
-        const jr = jg.createRadialGradient(40, 40, 2, 40, 40, 38);
-        jr.addColorStop(0, `rgba(${col},0.85)`); jr.addColorStop(0.6, `rgba(${col},0.35)`); jr.addColorStop(1, `rgba(${col},0)`);
-        jg.fillStyle = jr;
-        jg.beginPath(); jg.ellipse(40, 40, 36, 32, 0, Math.PI, 0); jg.closePath(); jg.fill();
-        jg.strokeStyle = `rgba(${col},0.7)`; jg.lineWidth = 1.5;
-        jg.beginPath(); jg.ellipse(40, 40, 30, 26, 0, Math.PI, 0); jg.stroke();
-        this.jellyImg[key] = { img: J, col };
-      }
+      for (let i = 0; i < 6; i++) this.rays.push({ x: rand(-0.1, 1.1), w: rand(0.6, 1.6), a: rand(0.07, 0.16), ph: rand(0, TAU), sp: rand(0.2, 0.5) });
+      this.bokehImg = bokehSprite('150,230,255');
+      this.bokeh = [];
+      for (let i = 0; i < (this.low ? 8 : 20); i++) this.bokeh.push({ x: rand(0, w), y: rand(0, h), r: rand(6, 28), a: rand(0.06, 0.2), vy: rand(-6, -2), ph: rand(0, TAU) });
+      const sc = Math.min(w, h) / 412;
       this.jellies = [];
-      const keys = ['c', 'p', 'k'];
-      for (let i = 0; i < (this.low ? 2 : 4); i++) this.jellies.push({ x: rand(0.05, 0.95) * w, y: rand(0.2, 1) * h, s: rand(0.5, 1.1), k: keys[i % 3], ph: rand(0, TAU), vx: rand(-6, 6) });
+      for (let i = 0; i < (this.low ? 2 : 3); i++) {
+        this.jellies.push({ x: rand(0.08, 0.92) * w, y: rand(0.2, 1) * h, R: [24, 34, 46][i] * sc * rand(0.9, 1.1), col: JELLY_COLS[i % JELLY_COLS.length], ph: rand(0, TAU), rate: rand(1.3, 1.9), vy: 0, vx: rand(-5, 5), c: 0 });
+      }
+      this.jellies.sort((a, b) => a.R - b.R);
       this.bubbles = [];
-      for (let i = 0; i < (this.low ? 15 : 36); i++) this.bubbles.push(this.newBubble(true));
+      for (let i = 0; i < (this.low ? 12 : 30); i++) this.bubbles.push(this.newBubble(true));
       this.snow = [];
       for (let i = 0; i < (this.low ? 30 : 80); i++) this.snow.push({ x: rand(0, w), y: rand(0, h), v: rand(4, 14), s: rand(0.6, 1.8), ph: rand(0, TAU) });
     }
     newBubble(anywhere, x, y) {
-      return { x: x != null ? x : rand(0, this.w), y: y != null ? y : anywhere ? rand(0, this.h) : this.h + 10, r: rand(1.5, 5), v: rand(25, 70), ph: rand(0, TAU), temp: x != null };
+      return { x: x != null ? x : rand(0, this.w), y: y != null ? y : anywhere ? rand(0, this.h) : this.h + 10, r: rand(1.5, 4.5), v: rand(25, 70), ph: rand(0, TAU), temp: x != null };
     }
     update(dt) {
       const s = dt / 1000;
@@ -168,15 +194,100 @@
       this.bubbles = this.bubbles.filter((b) => b.y > -20 || !b.temp);
       for (const b of this.bubbles) if (b.y < -20) Object.assign(b, this.newBubble(false));
       for (const p of this.snow) { p.y += p.v * s; p.ph += s; if (p.y > this.h) { p.y = -5; p.x = rand(0, this.w); } }
-      const b = this.beat || 0;
+      for (const b of this.bokeh) { b.y += b.vy * s; b.ph += s * 0.6; if (b.y < -40) { b.y = this.h + 40; b.x = rand(0, this.w); } }
+      // 水母：收縮時往上推進，放鬆時緩緩下沉
       for (const j of this.jellies) {
-        j.y -= (6 + b * 30) * j.s * s;
+        j.ph += s * j.rate;
+        const cyc = Math.pow(Math.max(0, Math.sin(j.ph)), 2);
+        j.c = Math.max(cyc, this.beat * 0.7);
+        j.vy += -j.c * 70 * s * (j.R / 24);
+        j.vy *= Math.pow(0.35, s);
+        j.y += (j.vy + 6) * s;
         j.x += j.vx * s;
-        if (j.y < -80) { j.y = this.h + 60; j.x = rand(0.05, 0.95) * this.w; }
+        if (j.y < -j.R * 6) { j.y = this.h + j.R * 2; j.x = rand(0.08, 0.92) * this.w; }
+        if (j.x < -60 || j.x > this.w + 60) j.vx = -j.vx;
       }
+    }
+    drawJelly(g, j, t) {
+      const { x, y, R, col, c } = j;
+      const rx = R * (1 - 0.16 * c), ry = R * (0.78 + 0.12 * c);
+      const ts = t / 1000;
+      glow(g, x, y, R * 2.8, col, 0.08 + 0.08 * c);
+      // 觸手
+      const nT = this.low ? 8 : 14;
+      g.lineCap = 'round';
+      for (let k = 0; k < nT; k++) {
+        const u = k / (nT - 1);
+        const sx = x - rx * 0.9 + u * rx * 1.8, sy = y + R * 0.08;
+        const len = R * (3.0 + (k % 3) * 0.8) * (1 - 0.2 * c);
+        let px = sx, py = sy;
+        const segs = 7;
+        for (let q = 1; q <= segs; q++) {
+          const f = q / segs;
+          const nx = sx + Math.sin(ts * 1.9 + k * 0.7 - f * 3.4 + j.ph) * R * 0.22 * f + (u - 0.5) * R * 0.35 * f;
+          const ny = sy + len * f;
+          g.strokeStyle = `rgba(${col},${0.6 * (1 - f) + 0.05})`;
+          g.lineWidth = Math.max(0.5, R * 0.035 * (1 - f * 0.6));
+          g.beginPath(); g.moveTo(px, py); g.lineTo(nx, ny); g.stroke();
+          px = nx; py = ny;
+        }
+      }
+      // 口腕：四條半透明緞帶
+      for (let a = 0; a < 4; a++) {
+        const off = (a - 1.5) * R * 0.16;
+        const L = R * 1.7;
+        const left = [], right = [];
+        for (let q = 0; q <= 10; q++) {
+          const f = q / 10;
+          const cx = x + off + Math.sin(ts * 1.4 + a * 1.7 + f * 4) * R * 0.2 * f;
+          const cy = y + R * 0.12 + f * L;
+          const wd = R * 0.11 * (1 - f * 0.75) * (1 + 0.3 * Math.sin(f * 14 + ts * 3));
+          left.push([cx - wd, cy]); right.push([cx + wd, cy]);
+        }
+        g.fillStyle = `rgba(${col},0.26)`;
+        g.beginPath(); g.moveTo(left[0][0], left[0][1]);
+        for (const [px, py] of left) g.lineTo(px, py);
+        for (let q = right.length - 1; q >= 0; q--) g.lineTo(right[q][0], right[q][1]);
+        g.closePath(); g.fill();
+      }
+      // 傘膜：邊緣較亮（菲涅耳），傘緣呈波浪
+      const bell = () => {
+        g.beginPath();
+        g.ellipse(x, y, rx, ry, 0, Math.PI, 0);
+        const N = 10;
+        for (let i = 0; i < N; i++) {
+          const x0 = x + rx - (2 * rx * i) / N, x1 = x + rx - (2 * rx * (i + 1)) / N;
+          g.quadraticCurveTo((x0 + x1) / 2, y + R * (0.13 + 0.05 * c), x1, y);
+        }
+        g.closePath();
+      };
+      const bg = g.createRadialGradient(x, y - ry * 0.25, 0, x, y - ry * 0.1, R * 1.05);
+      bg.addColorStop(0, `rgba(${col},0.08)`);
+      bg.addColorStop(0.55, `rgba(${col},0.16)`);
+      bg.addColorStop(0.86, `rgba(${col},0.42)`);
+      bg.addColorStop(1, `rgba(${col},0.1)`);
+      g.fillStyle = bg; bell(); g.fill();
+      g.strokeStyle = `rgba(${col},0.75)`; g.lineWidth = Math.max(0.8, R * 0.04); bell(); g.stroke();
+      // 內傘與生殖腺
+      g.fillStyle = 'rgba(255,255,255,0.05)';
+      g.beginPath(); g.ellipse(x, y - ry * 0.05, rx * 0.62, ry * 0.58, 0, Math.PI, 0); g.fill();
+      // 四葉狀生殖腺：柔和的發光團
+      for (let k = 0; k < 4; k++) {
+        const ang = (k / 4) * TAU + Math.PI / 4;
+        const gx = x + Math.cos(ang) * rx * 0.22, gy = y - ry * 0.4 + Math.sin(ang) * ry * 0.13;
+        const gg = g.createRadialGradient(gx, gy, 0, gx, gy, R * 0.16);
+        gg.addColorStop(0, 'rgba(255,255,255,0.45)'); gg.addColorStop(0.5, `rgba(${col},0.35)`); gg.addColorStop(1, `rgba(${col},0)`);
+        g.fillStyle = gg;
+        g.beginPath(); g.ellipse(gx, gy, R * 0.16, R * 0.11, ang, 0, TAU); g.fill();
+      }
+      // 高光
+      const hl = g.createRadialGradient(x - rx * 0.35, y - ry * 0.62, 0, x - rx * 0.35, y - ry * 0.62, rx * 0.4);
+      hl.addColorStop(0, 'rgba(255,255,255,0.35)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = hl; g.beginPath(); g.ellipse(x - rx * 0.35, y - ry * 0.62, rx * 0.4, ry * 0.25, -0.3, 0, TAU); g.fill();
     }
     draw(g, t, beat, B) {
       const w = this.w, h = this.h;
+      this.beat = beat;
       g.drawImage(this.bg.cv, 0, 0, w, h);
       g.globalCompositeOperation = 'lighter';
       for (const r of this.rays) {
@@ -188,31 +299,22 @@
         g.drawImage(this.ray.cv, -60 * r.w, 0, 120 * r.w, h * 1.1);
         g.restore();
       }
+      for (const b of this.bokeh) {
+        g.globalAlpha = b.a * (0.7 + 0.3 * Math.sin(b.ph));
+        g.drawImage(this.bokehImg.cv, b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+      }
       g.globalAlpha = 1;
       for (const p of this.snow) {
-        g.fillStyle = `rgba(200,240,255,${0.25 + 0.2 * Math.sin(p.ph)})`;
+        g.fillStyle = `rgba(200,240,255,${0.22 + 0.18 * Math.sin(p.ph)})`;
         g.fillRect(p.x + Math.sin(p.ph) * 4, p.y, p.s, p.s);
       }
-      // 水母：在拍點收縮、推進
-      this.beat = beat;
-      for (const j of this.jellies) {
-        const pulse = beat;
-        const J = this.jellyImg[j.k];
-        const sx = 80 * j.s * (1 - pulse * 0.12), sy = 60 * j.s * (1 + pulse * 0.1);
-        g.drawImage(J.img.cv, j.x - sx / 2, j.y - sy * 0.66, sx, sy);
-        g.strokeStyle = `rgba(${J.col},0.35)`; g.lineWidth = 1.2;
-        for (let k = 0; k < 5; k++) {
-          const bx = j.x + (k - 2) * 7 * j.s;
-          g.beginPath(); g.moveTo(bx, j.y);
-          for (let q = 1; q <= 6; q++) g.lineTo(bx + Math.sin(t / 400 + q * 0.8 + k + j.ph) * 4 * j.s, j.y + q * 9 * j.s);
-          g.stroke();
-        }
-      }
+      for (const j of this.jellies) this.drawJelly(g, j, t);
       for (const b of this.bubbles) {
-        g.strokeStyle = 'rgba(190,240,255,0.45)'; g.lineWidth = 1;
-        g.beginPath(); g.arc(b.x + Math.sin(b.ph) * 3, b.y, b.r, 0, TAU); g.stroke();
-        g.fillStyle = 'rgba(255,255,255,0.5)';
-        g.fillRect(b.x + Math.sin(b.ph) * 3 - b.r * 0.4, b.y - b.r * 0.5, 1.2, 1.2);
+        const bx = b.x + Math.sin(b.ph) * 3;
+        g.strokeStyle = 'rgba(190,240,255,0.4)'; g.lineWidth = 0.8;
+        g.beginPath(); g.arc(bx, b.y, b.r, 0, TAU); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        g.beginPath(); g.arc(bx - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.25, 0, TAU); g.fill();
       }
       g.globalCompositeOperation = 'source-over';
     }
@@ -223,6 +325,7 @@
         const row = d.rows && d.rows.length ? d.rows[i % d.rows.length].vy : 18;
         this.bubbles.push(this.newBubble(false, B.x + rand(0, B.w), B.y + (row + 0.5) * B.c + rand(-6, 6)));
       }
+      for (const j of this.jellies) j.vy -= 40 * d.lines;
     }
   }
 
@@ -744,118 +847,212 @@
   }
 
   // =========================================================
-  // 燈節：夜空、宮殿飛簷、紅燈籠、天燈；消行放煙火
+  // 燈節：夜空、宮殿飛簷、宮燈（透光漸層、竹骨、金帽、流蘇）、天燈、煙火
   // =========================================================
+  function lanternSprite() {
+    // 以 2 倍解析度繪製 60×78 的宮燈
+    const S = layer(120, 156);
+    const g = S.g;
+    g.scale(2, 2);
+    const cx = 30, cy = 40, rx = 27, ry = 28;
+    // 吊鉤
+    g.strokeStyle = '#d8a84a'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, 7); g.stroke();
+    const cap = (y) => {
+      const gr = g.createLinearGradient(cx - 13, 0, cx + 13, 0);
+      gr.addColorStop(0, '#5e3509'); gr.addColorStop(0.3, '#f6d685'); gr.addColorStop(0.55, '#b98326'); gr.addColorStop(0.8, '#f3cf7a'); gr.addColorStop(1, '#5e3509');
+      g.fillStyle = gr;
+      g.beginPath(); g.moveTo(cx - 13, y); g.lineTo(cx + 13, y); g.lineTo(cx + 11, y + 6); g.lineTo(cx - 11, y + 6); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,240,190,0.5)'; g.fillRect(cx - 12, y + 1, 24, 0.8);
+    };
+    // 燈身：內部透光
+    const body = g.createRadialGradient(cx, cy + 2, 0, cx, cy, ry);
+    body.addColorStop(0, '#fff6c8'); body.addColorStop(0.2, '#ffd06a'); body.addColorStop(0.45, '#ff6a32');
+    body.addColorStop(0.75, '#cf1d1d'); body.addColorStop(1, '#6e0a12');
+    g.fillStyle = body;
+    g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.fill();
+    g.save();
+    g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.clip();
+    // 竹骨
+    for (let k = -3; k <= 3; k++) {
+      g.strokeStyle = 'rgba(110,10,15,0.45)'; g.lineWidth = 0.9;
+      g.beginPath(); g.ellipse(cx, cy, Math.abs(k) / 3.4 * rx + 0.01, ry, 0, 0, TAU); g.stroke();
+      g.strokeStyle = 'rgba(255,190,130,0.14)'; g.lineWidth = 0.6;
+      g.beginPath(); g.ellipse(cx - 0.8, cy, Math.abs(k) / 3.4 * rx + 0.01, ry, 0, 0, TAU); g.stroke();
+    }
+    // 左右邊緣變暗，做出立體感
+    const side = g.createLinearGradient(cx - rx, 0, cx + rx, 0);
+    side.addColorStop(0, 'rgba(50,0,5,0.55)'); side.addColorStop(0.28, 'rgba(50,0,5,0)'); side.addColorStop(0.72, 'rgba(50,0,5,0)'); side.addColorStop(1, 'rgba(50,0,5,0.6)');
+    g.fillStyle = side; g.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+    // 福字
+    g.font = '700 17px "Noto Serif TC", "Songti TC", serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = 'rgba(255,214,120,0.9)';
+    g.fillText('福', cx, cy + 1);
+    // 高光
+    const hl = g.createRadialGradient(cx - 9, cy - 13, 0, cx - 9, cy - 13, 11);
+    hl.addColorStop(0, 'rgba(255,255,255,0.4)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = hl; g.fillRect(cx - 22, cy - 26, 26, 26);
+    g.restore();
+    g.strokeStyle = 'rgba(90,5,10,0.65)'; g.lineWidth = 1;
+    g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.stroke();
+    cap(7); cap(66);
+    return S;
+  }
+
   class Lantern {
     constructor(low) { this.low = low; this.fw = []; this.fwTimer = 2; }
     resize(w, h) {
       this.w = w; this.h = h;
+      this.sc = Math.min(w, h) / 412;
       const L = (this.bg = layer(w, h));
       const g = L.g;
-      g.fillStyle = vgrad(g, h, [[0, '#07061c'], [0.45, '#1c0b33'], [0.78, '#5a1630'], [0.86, '#8a2a2a'], [1, '#120509']]);
+      g.fillStyle = vgrad(g, h, [[0, '#06051a'], [0.45, '#1a0a31'], [0.78, '#55142d'], [0.86, '#86282a'], [1, '#110408']]);
       g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 120; i++) {
-        g.fillStyle = `rgba(255,235,210,${rand(0.1, 0.5)})`;
+      for (let i = 0; i < 140; i++) {
+        g.fillStyle = `rgba(255,235,210,${rand(0.08, 0.45)})`;
         g.fillRect(rand(0, w), rand(0, h * 0.5), 1, 1);
       }
-      glow(g, w * 0.5, h * 0.88, w * 0.8, '255,120,60', 0.25);
-      // 宮殿剪影（飛簷）
-      const roof = (cx, baseY, width, height, tiers) => {
-        g.fillStyle = '#100308';
+      glow(g, w * 0.5, h * 0.9, w * 0.85, '255,120,60', 0.28);
+      // 宮殿剪影（飛簷、斗拱的層次）
+      const roof = (cx, baseY, width, height, tiers, color) => {
         let y = baseY;
         for (let k = 0; k < tiers; k++) {
           const ww = width * (1 - k * 0.22), hh = height;
+          g.fillStyle = color;
           g.fillRect(cx - ww * 0.36, y - hh * 0.9, ww * 0.72, hh * 0.9);
-          g.beginPath();
-          g.moveTo(cx - ww * 0.62, y - hh * 0.95);
-          g.quadraticCurveTo(cx - ww * 0.45, y - hh * 1.0, cx - ww * 0.3, y - hh * 1.45);
-          g.lineTo(cx + ww * 0.3, y - hh * 1.45);
-          g.quadraticCurveTo(cx + ww * 0.45, y - hh * 1.0, cx + ww * 0.62, y - hh * 0.95);
-          g.lineTo(cx + ww * 0.6, y - hh * 0.85); g.lineTo(cx - ww * 0.6, y - hh * 0.85); g.fill();
-          // 窗
-          for (let wx = cx - ww * 0.3; wx < cx + ww * 0.3; wx += 9) {
-            if (Math.random() < 0.6) { g.fillStyle = `rgba(255,${rand(150, 200) | 0},80,${rand(0.4, 0.8)})`; g.fillRect(wx, y - hh * 0.6, 4, hh * 0.35); g.fillStyle = '#100308'; }
+          for (let wx = cx - ww * 0.32; wx < cx + ww * 0.32; wx += 8) {
+            if (Math.random() < 0.55) {
+              const wg = g.createLinearGradient(0, y - hh * 0.62, 0, y - hh * 0.2);
+              wg.addColorStop(0, `rgba(255,${rand(170, 210) | 0},110,0.85)`); wg.addColorStop(1, 'rgba(255,120,40,0.5)');
+              g.fillStyle = wg; g.fillRect(wx, y - hh * 0.62, 4, hh * 0.42);
+            }
           }
-          y -= hh * 1.35;
+          g.fillStyle = color;
+          g.beginPath();
+          g.moveTo(cx - ww * 0.64, y - hh * 0.98);
+          g.quadraticCurveTo(cx - ww * 0.46, y - hh * 1.02, cx - ww * 0.3, y - hh * 1.48);
+          g.lineTo(cx + ww * 0.3, y - hh * 1.48);
+          g.quadraticCurveTo(cx + ww * 0.46, y - hh * 1.02, cx + ww * 0.64, y - hh * 0.98);
+          g.lineTo(cx + ww * 0.6, y - hh * 0.86); g.lineTo(cx - ww * 0.6, y - hh * 0.86); g.fill();
+          g.strokeStyle = 'rgba(255,150,80,0.25)'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(cx - ww * 0.62, y - hh * 0.97); g.quadraticCurveTo(cx - ww * 0.46, y - hh * 1.0, cx - ww * 0.3, y - hh * 1.46); g.stroke();
+          y -= hh * 1.38;
         }
       };
       const gy = h * 0.93;
-      roof(w * 0.18, gy, w * 0.42, h * 0.05, 2);
-      roof(w * 0.78, gy, w * 0.36, h * 0.045, 4);
-      roof(w * 0.5, gy + 4, w * 0.5, h * 0.035, 1);
-      g.fillStyle = '#0b0206'; g.fillRect(0, gy, w, h - gy);
-      // 燈籠素材
-      const S = (this.lantern = layer(40, 56));
-      const sg = S.g;
-      const lg = sg.createRadialGradient(20, 28, 2, 20, 28, 20);
-      lg.addColorStop(0, '#ffb36a'); lg.addColorStop(0.45, '#ff3b2f'); lg.addColorStop(1, '#8e0f16');
-      sg.fillStyle = lg; sg.beginPath(); sg.ellipse(20, 28, 17, 19, 0, 0, TAU); sg.fill();
-      sg.strokeStyle = 'rgba(120,10,15,0.5)'; sg.lineWidth = 1;
-      for (const k of [-0.55, 0, 0.55]) { sg.beginPath(); sg.ellipse(20, 28, 17 * Math.abs(k) + 0.1, 19, 0, 0, TAU); sg.stroke(); }
-      sg.fillStyle = '#e8b04a'; sg.fillRect(12, 7, 16, 4); sg.fillRect(12, 45, 16, 4);
-      sg.strokeStyle = '#e8b04a'; sg.lineWidth = 1.5; sg.beginPath(); sg.moveTo(20, 49); sg.lineTo(20, 56); sg.stroke();
-      // 天燈素材
-      const K = (this.sky = layer(20, 26));
+      roof(w * 0.12, gy - h * 0.03, w * 0.32, h * 0.035, 1, '#1d0610');
+      roof(w * 0.9, gy - h * 0.025, w * 0.28, h * 0.03, 2, '#1d0610');
+      roof(w * 0.2, gy, w * 0.42, h * 0.05, 2, '#0f0308');
+      roof(w * 0.78, gy, w * 0.36, h * 0.045, 4, '#0f0308');
+      roof(w * 0.5, gy + 4, w * 0.5, h * 0.035, 1, '#0f0308');
+      g.fillStyle = '#0a0205'; g.fillRect(0, gy, w, h - gy);
+      this.lantern = lanternSprite();
+      // 天燈
+      const K = (this.sky = layer(28, 36));
       const kg = K.g;
-      const kgr = kg.createLinearGradient(0, 0, 0, 26);
-      kgr.addColorStop(0, '#ffd27a'); kgr.addColorStop(1, '#ff7a2a');
-      kg.fillStyle = kgr; kg.beginPath(); kg.moveTo(3, 2); kg.lineTo(17, 2); kg.lineTo(15, 24); kg.lineTo(5, 24); kg.closePath(); kg.fill();
-      this.strings = [{ y0: 0.05, y1: 0.08, sag: 0.05, n: 6 }, { y0: 0.16, y1: 0.13, sag: 0.04, n: 5 }];
+      const kgr = kg.createLinearGradient(0, 0, 0, 36);
+      kgr.addColorStop(0, 'rgba(255,226,160,0.95)'); kgr.addColorStop(0.7, 'rgba(255,150,70,0.95)'); kgr.addColorStop(1, 'rgba(230,90,40,0.9)');
+      kg.fillStyle = kgr; kg.beginPath(); kg.moveTo(4, 2); kg.quadraticCurveTo(14, -1, 24, 2); kg.lineTo(21, 32); kg.lineTo(7, 32); kg.closePath(); kg.fill();
+      kg.strokeStyle = 'rgba(160,60,20,0.35)'; kg.lineWidth = 0.6;
+      for (const x of [9, 14, 19]) { kg.beginPath(); kg.moveTo(x, 2); kg.lineTo(x + (x - 14) * 0.2, 32); kg.stroke(); }
+      const fl = kg.createRadialGradient(14, 30, 0, 14, 30, 8);
+      fl.addColorStop(0, 'rgba(255,255,220,1)'); fl.addColorStop(1, 'rgba(255,200,100,0)');
+      kg.fillStyle = fl; kg.fillRect(4, 22, 20, 14);
+      this.bokehImg = bokehSprite('255,150,70');
+      this.bokehImg2 = bokehSprite('255,90,60');
+      this.bokeh = [];
+      for (let i = 0; i < (this.low ? 10 : 24); i++) this.bokeh.push({ x: rand(0, w), y: rand(0.15, 0.85) * h, r: rand(6, 22) * this.sc, a: rand(0.12, 0.35), ph: rand(0, TAU), k: Math.random() < 0.5 });
+      this.strings = [{ y0: 0.02, y1: 0.035, sag: 0.03, n: 9 }];
       this.skies = [];
-      for (let i = 0; i < (this.low ? 8 : 18); i++) this.skies.push({ x: rand(0, w), y: rand(0.2, 1.1) * h, z: rand(0.4, 1), ph: rand(0, TAU) });
+      for (let i = 0; i < (this.low ? 7 : 16); i++) this.skies.push({ x: rand(0, w), y: rand(0.2, 1.1) * h, z: rand(0.35, 1), ph: rand(0, TAU) });
     }
     firework(x, y, big) {
-      const n = (this.low ? 24 : 60) * (big ? 1.4 : 1);
-      const cols = ['255,210,90', '255,90,70', '255,150,200', '255,240,180'];
+      const n = Math.round((this.low ? 26 : 64) * (big ? 1.4 : 1));
+      const cols = ['255,210,90', '255,90,70', '255,150,200', '255,240,190', '140,220,255'];
       const col = cols[(Math.random() * cols.length) | 0];
-      const sp = rand(70, 120) * (big ? 1.5 : 1);
+      const sp = rand(70, 120) * (big ? 1.5 : 1) * this.sc;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * TAU + rand(-0.05, 0.05);
         const v = sp * rand(0.75, 1);
-        this.fw.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(1.1, 1.6), max: 1.6, col });
+        this.fw.push({ x, y, px: x, py: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(1.2, 1.7), max: 1.7, col, tw: rand(0, TAU) });
       }
+      this.fw.push({ flash: true, x, y, life: 0.25, max: 0.25, r: sp * 0.9 });
     }
     update(dt) {
       const s = dt / 1000;
-      for (const k of this.skies) { k.y -= (10 + 14 * k.z) * s; k.ph += s; if (k.y < -30) { k.y = this.h + 20; k.x = rand(0, this.w); } }
-      for (const p of this.fw) { p.vx *= Math.pow(0.4, s); p.vy = p.vy * Math.pow(0.4, s) + 40 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s; }
+      for (const k of this.skies) { k.y -= (9 + 14 * k.z) * s; k.ph += s; if (k.y < -40) { k.y = this.h + 20; k.x = rand(0, this.w); } }
+      for (const b of this.bokeh) b.ph += s * 0.8;
+      for (const p of this.fw) {
+        p.life -= s;
+        if (p.flash) continue;
+        p.px = p.x; p.py = p.y;
+        p.vx *= Math.pow(0.35, s); p.vy = p.vy * Math.pow(0.35, s) + 38 * s * this.sc;
+        p.x += p.vx * s; p.y += p.vy * s;
+      }
       this.fw = this.fw.filter((p) => p.life > 0);
       this.fwTimer -= s;
       if (this.fwTimer <= 0) { this.fwTimer = rand(2.5, 5); this.firework(rand(0.1, 0.9) * this.w, rand(0.12, 0.4) * this.h, false); }
+    }
+    drawTassel(g, x, y, sway, t, i) {
+      g.fillStyle = '#e8b24a';
+      g.beginPath(); g.arc(x, y + 2, 2.2, 0, TAU); g.fill();
+      g.lineWidth = 0.9;
+      for (let k = 0; k < 9; k++) {
+        const dx = (k - 4) * 0.8;
+        const wv = Math.sin(t / 500 + k * 0.6 + i) * 1.4 - sway * 40;
+        g.strokeStyle = k % 4 === 0 ? 'rgba(240,190,90,0.9)' : 'rgba(200,20,35,0.9)';
+        g.beginPath(); g.moveTo(x + dx * 0.4, y + 4); g.quadraticCurveTo(x + dx + wv * 0.5, y + 14, x + dx + wv, y + 24); g.stroke();
+      }
     }
     draw(g, t, beat, B) {
       const w = this.w, h = this.h;
       g.drawImage(this.bg.cv, 0, 0, w, h);
       g.globalCompositeOperation = 'lighter';
-      // 天燈
+      for (const b of this.bokeh) {
+        g.globalAlpha = b.a * (0.75 + 0.25 * Math.sin(b.ph));
+        g.drawImage((b.k ? this.bokehImg : this.bokehImg2).cv, b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+      }
+      g.globalAlpha = 1;
       for (const k of this.skies) {
-        const sx = k.x + Math.sin(k.ph) * 6, sz = 0.6 + k.z * 0.7;
-        glow(g, sx, k.y + 12 * sz, 22 * sz, '255,150,60', 0.25 * k.z);
-        g.globalAlpha = 0.5 + k.z * 0.5;
-        g.drawImage(this.sky.cv, sx - 10 * sz, k.y, 20 * sz, 26 * sz);
+        const sx = k.x + Math.sin(k.ph) * 6, sz = (0.5 + k.z * 0.7) * this.sc;
+        const fl = 0.85 + 0.15 * Math.sin(t / 120 + k.ph * 7);
+        glow(g, sx, k.y + 26 * sz, 30 * sz, '255,150,60', 0.28 * k.z * fl);
+        g.globalAlpha = 0.45 + k.z * 0.55;
+        g.drawImage(this.sky.cv, sx - 14 * sz, k.y, 28 * sz, 36 * sz);
         g.globalAlpha = 1;
       }
-      // 煙火
+      // 煙火（帶尾跡）
+      g.lineCap = 'round';
       for (const p of this.fw) {
-        const a = Math.min(1, p.life / p.max * 1.4);
-        g.fillStyle = `rgba(${p.col},${a})`;
-        g.fillRect(p.x - 1.2, p.y - 1.2, 2.4, 2.4);
+        const k = p.life / p.max;
+        if (p.flash) { glow(g, p.x, p.y, p.r, '255,240,210', 0.5 * k); continue; }
+        const tw = k < 0.35 ? 0.5 + 0.5 * Math.sin(t / 40 + p.tw) : 1;
+        g.strokeStyle = `rgba(${k > 0.75 ? '255,250,230' : p.col},${Math.min(1, k * 1.5) * tw})`;
+        g.lineWidth = 1.6 * this.sc;
+        g.beginPath(); g.moveTo(p.px, p.py); g.lineTo(p.x, p.y); g.stroke();
       }
       g.globalCompositeOperation = 'source-over';
-      // 燈籠串（隨節拍擺動）
-      for (const st of this.strings) {
+      // 宮燈串
+      const ls = this.sc * 0.95;
+      for (let si = 0; si < this.strings.length; si++) {
+        const st = this.strings[si];
         const y0 = st.y0 * h, y1 = st.y1 * h, sag = st.sag * h;
         const yAt = (x) => { const k = x / w; return y0 + (y1 - y0) * k + sag * 4 * k * (1 - k); };
-        g.strokeStyle = 'rgba(30,8,10,0.9)'; g.lineWidth = 1.5;
-        g.beginPath(); for (let x = 0; x <= w; x += 10) (x ? g.lineTo(x, yAt(x)) : g.moveTo(x, yAt(x))); g.stroke();
+        g.strokeStyle = 'rgba(20,5,8,0.95)'; g.lineWidth = 1.6;
+        g.beginPath(); for (let x = 0; x <= w; x += 8) (x ? g.lineTo(x, yAt(x)) : g.moveTo(x, yAt(x))); g.stroke();
         for (let i = 0; i < st.n; i++) {
           const x = (i + 0.5) / st.n * w, y = yAt(x);
-          const sway = Math.sin(t / 900 + i * 1.3) * 0.08 + beat * 0.06 * (i % 2 ? 1 : -1);
-          g.save(); g.translate(x, y); g.rotate(sway);
+          if (x > B.x - 18 * ls && x < B.x + B.w + 18 * ls) continue; // 場地正後方不掛，避免干擾判讀
+          const sway = Math.sin(t / 1100 + i * 1.3 + si) * 0.06 + beat * 0.05 * (i % 2 ? 1 : -1);
+          const fl = 0.9 + 0.1 * Math.sin(t / 90 + i * 3.1);
+          g.save(); g.translate(x, y); g.rotate(sway); g.scale(ls, ls);
           g.globalCompositeOperation = 'lighter';
-          glow(g, 0, 32, 36, '255,90,40', 0.35 + beat * 0.25);
+          glow(g, 0, 40, 62, '255,100,40', (0.32 + beat * 0.2) * fl);
+          glow(g, 0, 40, 26, '255,200,120', 0.25 * fl);
           g.globalCompositeOperation = 'source-over';
-          g.drawImage(this.lantern.cv, -16, 4, 32, 45);
+          g.drawImage(this.lantern.cv, -30, 0, 60, 78);
+          this.drawTassel(g, 0, 72, sway, t, i);
           g.restore();
         }
       }
@@ -866,5 +1063,588 @@
     }
   }
 
-  root.LumenScenes = [Starfield, DeepSea, Aurora, InkWash, NeonCity, Sakura, Lantern, Sunset];
+  // =========================================================
+  // 竹林：晨霧、斜射陽光、三層竹子、飄落竹葉、光中浮塵
+  // =========================================================
+  function leafSprite(c1, c2) {
+    const S = layer(30, 10);
+    const g = S.g;
+    const gr = g.createLinearGradient(0, 0, 30, 10);
+    gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+    g.fillStyle = gr;
+    g.beginPath(); g.moveTo(0, 5); g.quadraticCurveTo(12, -1, 30, 5); g.quadraticCurveTo(12, 11, 0, 5); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 0.5;
+    g.beginPath(); g.moveTo(1, 5); g.lineTo(28, 5); g.stroke();
+    return S;
+  }
+  class Bamboo {
+    constructor(low) { this.low = low; this.wind = 0; this.extra = []; this.bloomScale = 0.6; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#d6e8cf'], [0.35, '#9cc39a'], [0.7, '#4f7d55'], [1, '#1d3523']]);
+      g.fillRect(0, 0, w, h);
+      glow(g, w * 0.15, -h * 0.05, w * 0.9, '255,250,220', 0.5);
+      const stalk = (x, wd, top, color, node, lean) => {
+        g.fillStyle = color;
+        g.save(); g.translate(x, h); g.rotate(lean);
+        g.fillRect(-wd / 2, -h - 20, wd, h + 20);
+        g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(-wd / 2, -h - 20, wd * 0.25, h + 20);
+        for (let y = -rand(30, 80); y > -h - 20; y -= rand(50, 90) * sc) {
+          g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(-wd / 2 - 1, y, wd + 2, Math.max(1.5, wd * 0.12));
+          g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(-wd / 2, y + Math.max(1.5, wd * 0.12), wd, 1);
+        }
+        g.restore();
+        // 葉叢
+        for (let k = 0; k < 3; k++) {
+          const ly = top + rand(0, h * 0.4);
+          for (let q = 0; q < 6; q++) {
+            g.save(); g.translate(x + Math.sin(lean) * (h - ly), ly); g.rotate(rand(-0.6, 0.6) + (Math.random() < 0.5 ? Math.PI : 0));
+            g.fillStyle = color;
+            g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(10 * sc, -3 * sc, 26 * sc, 0); g.quadraticCurveTo(10 * sc, 3 * sc, 0, 0); g.fill();
+            g.restore();
+          }
+        }
+      };
+      for (let i = 0; i < 14; i++) stalk(rand(0, w), rand(4, 7) * sc, rand(0, h * 0.3), `rgba(120,160,120,${rand(0.25, 0.4)})`, true, rand(-0.04, 0.04));
+      // 霧
+      for (let i = 0; i < 4; i++) glow(g, rand(0, w), rand(0.5, 0.9) * h, w * 0.5, '230,240,225', 0.35);
+      for (let i = 0; i < 9; i++) stalk(rand(0, w), rand(8, 12) * sc, rand(0, h * 0.2), `rgba(55,95,60,${rand(0.6, 0.8)})`, true, rand(-0.05, 0.05));
+      for (let i = 0; i < 3; i++) glow(g, rand(0, w), rand(0.75, 1) * h, w * 0.6, '200,225,195', 0.3);
+      // 光束
+      const R = (this.ray = layer(80, 600));
+      const rg = R.g.createLinearGradient(0, 0, 0, 600);
+      rg.addColorStop(0, 'rgba(255,250,220,0.55)'); rg.addColorStop(1, 'rgba(255,250,220,0)');
+      R.g.fillStyle = rg; R.g.beginPath(); R.g.moveTo(30, 0); R.g.lineTo(50, 0); R.g.lineTo(80, 600); R.g.lineTo(0, 600); R.g.fill();
+      this.rays = [];
+      for (let i = 0; i < 5; i++) this.rays.push({ x: rand(-0.1, 0.8), w: rand(0.6, 1.5), a: rand(0.1, 0.22), ph: rand(0, TAU) });
+      // 近景竹（每幀繪製、會搖曳）
+      this.near = [];
+      for (let i = 0; i < 5; i++) this.near.push({ x: [0.03, 0.12, 0.88, 0.97, 0.5][i] * w + rand(-10, 10), wd: rand(14, 20) * sc, ph: rand(0, TAU), nodes: Array.from({ length: 14 }, () => rand(60, 95) * sc) });
+      this.leafImg = leafSprite('#7fb36a', '#2f5e30');
+      this.leaves = [];
+      for (let i = 0; i < (this.low ? 10 : 22); i++) this.leaves.push(this.newLeaf(true));
+      this.motes = [];
+      for (let i = 0; i < (this.low ? 15 : 40); i++) this.motes.push({ x: rand(0, w), y: rand(0, h), v: rand(3, 10), ph: rand(0, TAU) });
+    }
+    newLeaf(anywhere, x, y) {
+      return { x: x != null ? x : rand(-0.2, 1) * this.w, y: y != null ? y : anywhere ? rand(0, this.h) : rand(-30, -10), vx: rand(10, 30), vy: rand(25, 50), rot: rand(0, TAU), vr: rand(-2, 2), flip: rand(0, TAU), vf: rand(2, 4), s: rand(0.6, 1.1) * this.sc };
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.wind *= Math.pow(0.3, s);
+      const upd = (p) => { p.x += (p.vx + this.wind) * s; p.y += p.vy * s; p.rot += p.vr * s; p.flip += p.vf * s; };
+      for (const p of this.leaves) { upd(p); if (p.y > this.h + 20 || p.x > this.w + 30) Object.assign(p, this.newLeaf(false)); }
+      for (const p of this.extra) { upd(p); p.vy += 40 * s; }
+      this.extra = this.extra.filter((p) => p.y < this.h + 20 && p.x < this.w + 40);
+      for (const m of this.motes) { m.y -= m.v * s; m.ph += s; if (m.y < -5) { m.y = this.h + 5; m.x = rand(0, this.w); } }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      for (const r of this.rays) {
+        g.save();
+        g.globalAlpha = r.a * (0.75 + 0.25 * Math.sin(t / 2000 + r.ph));
+        g.translate(r.x * w, -20); g.rotate(-0.35);
+        g.drawImage(this.ray.cv, -40 * r.w, 0, 80 * r.w, h * 1.3);
+        g.restore();
+      }
+      g.globalAlpha = 1;
+      for (const m of this.motes) {
+        g.fillStyle = `rgba(255,250,210,${0.35 + 0.3 * Math.sin(m.ph * 2)})`;
+        g.fillRect(m.x + Math.sin(m.ph) * 6, m.y, 1.6, 1.6);
+      }
+      g.globalCompositeOperation = 'source-over';
+      // 近景竹
+      for (const n of this.near) {
+        const sway = Math.sin(t / 1600 + n.ph) * 0.018 + this.wind * 0.00015;
+        g.save(); g.translate(n.x, h + 10); g.rotate(sway);
+        const gr = g.createLinearGradient(-n.wd / 2, 0, n.wd / 2, 0);
+        gr.addColorStop(0, '#15301a'); gr.addColorStop(0.35, '#5c8f52'); gr.addColorStop(0.6, '#3a6a3a'); gr.addColorStop(1, '#10240f');
+        g.fillStyle = gr;
+        g.fillRect(-n.wd / 2, -h - 40, n.wd, h + 40);
+        let y = -20;
+        for (const step of n.nodes) {
+          y -= step;
+          if (y < -h - 40) break;
+          g.fillStyle = 'rgba(10,25,10,0.6)'; g.fillRect(-n.wd / 2 - 1.5, y, n.wd + 3, 3);
+          g.fillStyle = 'rgba(200,230,170,0.35)'; g.fillRect(-n.wd / 2, y + 3, n.wd, 1.2);
+        }
+        g.restore();
+      }
+      const img = this.leafImg.cv;
+      const drawLeaf = (p) => {
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(p.s, p.s * Math.cos(p.flip));
+        g.drawImage(img, -15, -5, 30, 10); g.restore();
+      };
+      for (const p of this.leaves) drawLeaf(p);
+      for (const p of this.extra) drawLeaf(p);
+    }
+    burst(d, B) {
+      this.wind = Math.min(500, this.wind + 70 * d.lines + (d.lines >= 4 ? 150 : 0));
+      const n = Math.min(this.low ? 10 : 30, d.lines * (this.low ? 3 : 8));
+      for (let i = 0; i < n; i++) {
+        const row = d.rows && d.rows.length ? d.rows[i % d.rows.length].vy : 18;
+        const p = this.newLeaf(false, B.x + rand(0, B.w), B.y + (row + 0.5) * B.c);
+        p.vx = rand(60, 220); p.vy = rand(-90, 10);
+        this.extra.push(p);
+      }
+    }
+  }
+
+  // =========================================================
+  // 敦煌：大漠黃昏、石窟崖壁、層層沙丘、飛天彩帶、風沙
+  // =========================================================
+  class Dunhuang {
+    constructor(low) { this.low = low; this.flash = 0; this.speed = 1; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#14203d'], [0.3, '#47406a'], [0.52, '#c97f5c'], [0.62, '#f0bd78'], [1, '#6b3a25']]);
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(255,240,220,${rand(0.1, 0.5)})`; g.fillRect(rand(0, w), rand(0, h * 0.3), 1, 1); }
+      // 新月
+      const mx = w * 0.2, my = h * 0.12, mr = 18 * sc;
+      glow(g, mx, my, mr * 4, '255,240,210', 0.18);
+      g.fillStyle = '#fff3d6'; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'destination-out';
+      g.beginPath(); g.arc(mx + mr * 0.45, my - mr * 0.2, mr * 0.9, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'source-over';
+      glow(g, w * 0.6, h * 0.62, w * 0.8, '255,190,110', 0.35);
+      // 沙丘
+      const dune = (base, amp, top, bot, seed) => {
+        const gr = g.createLinearGradient(0, base - amp, 0, h);
+        gr.addColorStop(0, top); gr.addColorStop(1, bot);
+        g.fillStyle = gr;
+        g.beginPath(); g.moveTo(0, h);
+        for (let x = 0; x <= w + 10; x += 8) g.lineTo(x, base - amp * Math.pow(Math.abs(Math.sin(x * 0.004 + seed)), 1.4) - amp * 0.2 * Math.sin(x * 0.011 + seed * 2));
+        g.lineTo(w, h); g.closePath(); g.fill();
+      };
+      dune(h * 0.66, h * 0.08, '#c98f6a', '#8a5a48', 1.2);
+      dune(h * 0.76, h * 0.1, '#e2a66a', '#9a5e38', 3.4);
+      dune(h * 0.9, h * 0.1, '#d08a4e', '#5a2f1c', 5.1);
+      // 石窟崖壁（右側）
+      const cx0 = w * 0.72;
+      const cliff = g.createLinearGradient(cx0, 0, w, 0);
+      cliff.addColorStop(0, '#a4683f'); cliff.addColorStop(0.4, '#8a5232'); cliff.addColorStop(1, '#5a311d');
+      g.fillStyle = cliff;
+      g.beginPath(); g.moveTo(cx0, h); g.lineTo(cx0 + w * 0.02, h * 0.45);
+      for (let y = h * 0.45; y > h * 0.3; y -= 10) g.lineTo(cx0 + w * 0.03 + Math.sin(y * 0.1) * 4, y);
+      g.lineTo(w, h * 0.28); g.lineTo(w, h); g.closePath(); g.fill();
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const nx = cx0 + w * (0.06 + c * 0.065), ny = h * (0.4 + r * 0.11);
+          const nw = 10 * sc, nh = 16 * sc;
+          g.fillStyle = 'rgba(30,12,6,0.85)';
+          g.beginPath(); g.moveTo(nx - nw / 2, ny + nh / 2); g.lineTo(nx - nw / 2, ny - nh * 0.1); g.quadraticCurveTo(nx, ny - nh * 0.8, nx + nw / 2, ny - nh * 0.1); g.lineTo(nx + nw / 2, ny + nh / 2); g.fill();
+          if (Math.random() < 0.5) glow(g, nx, ny + nh * 0.1, nw, '255,180,90', 0.35);
+        }
+      }
+      this.ribbons = [];
+      const cols = [['80,200,190', '30,120,140'], ['230,90,70', '150,40,40'], ['240,200,110', '180,120,50']];
+      for (let i = 0; i < 3; i++) this.ribbons.push({ y: rand(0.15, 0.45) * h, amp: rand(0.04, 0.08) * h, ph: rand(0, TAU), sp: rand(0.25, 0.45), len: rand(0.6, 0.9) * w, wd: rand(6, 10) * sc, col: cols[i], off: rand(0, 1) });
+      this.sand = [];
+      for (let i = 0; i < (this.low ? 30 : 80); i++) this.sand.push({ x: rand(0, w), y: rand(0.4, 1) * h, v: rand(30, 90), s: rand(0.6, 1.6) });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.15, s);
+      this.speed = 1 + this.flash * 2;
+      for (const r of this.ribbons) r.off = (r.off + s * 0.05 * r.sp * this.speed) % 1.6;
+      for (const p of this.sand) { p.x += p.v * s * this.speed; p.y += Math.sin(p.x * 0.02) * 0.2; if (p.x > this.w + 5) { p.x = -5; p.y = rand(0.4, 1) * this.h; } }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      const ts = t / 1000;
+      // 飛天彩帶
+      for (const r of this.ribbons) {
+        const head = -0.3 * w + r.off * (w + r.len);
+        const N = 40;
+        const top = [], bot = [];
+        for (let i = 0; i <= N; i++) {
+          const f = i / N;
+          const x = head - f * r.len;
+          const y = r.y + Math.sin(x * 0.012 + ts * r.sp * 2 + r.ph) * r.amp + Math.sin(f * 9 + ts * 2) * r.amp * 0.15;
+          const wd = r.wd * Math.sin(f * Math.PI) * (0.6 + 0.4 * Math.sin(f * 12 + ts * 3));
+          top.push([x, y - wd]); bot.push([x, y + wd]);
+        }
+        const gr = g.createLinearGradient(head - r.len, 0, head, 0);
+        gr.addColorStop(0, `rgba(${r.col[0]},0)`); gr.addColorStop(0.5, `rgba(${r.col[0]},${0.8 + beat * 0.2})`); gr.addColorStop(1, `rgba(${r.col[1]},0.9)`);
+        g.fillStyle = gr;
+        g.beginPath(); g.moveTo(top[0][0], top[0][1]);
+        for (const [x, y] of top) g.lineTo(x, y);
+        for (let i = bot.length - 1; i >= 0; i--) g.lineTo(bot[i][0], bot[i][1]);
+        g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(255,240,200,0.35)'; g.lineWidth = 0.8;
+        g.beginPath(); top.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+      }
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = 'rgba(255,215,160,0.35)';
+      for (const p of this.sand) g.fillRect(p.x, p.y, p.s * 2.5, p.s * 0.7);
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
+  }
+
+  // =========================================================
+  // 螢火森林：月光、三層樹影、發光蘑菇、霧、螢火蟲
+  // =========================================================
+  class Firefly {
+    constructor(low) { this.low = low; this.flash = 0; this.swarm = []; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#030a16'], [0.5, '#06222c'], [1, '#020b0b']]);
+      g.fillRect(0, 0, w, h);
+      glow(g, w * 0.7, h * 0.08, w * 0.7, '170,230,255', 0.18);
+      const trees = (n, color, minW, maxW, fog) => {
+        for (let i = 0; i < n; i++) {
+          const x = rand(-0.05, 1.05) * w, tw = rand(minW, maxW) * sc;
+          g.fillStyle = color;
+          g.beginPath(); g.moveTo(x - tw * 0.6, h); g.lineTo(x - tw * 0.4, 0); g.lineTo(x + tw * 0.4, 0); g.lineTo(x + tw * 0.7, h); g.fill();
+          for (let k = 0; k < 3; k++) {
+            g.lineWidth = tw * 0.25; g.strokeStyle = color;
+            const by = rand(0.1, 0.6) * h, dir = Math.random() < 0.5 ? -1 : 1;
+            g.beginPath(); g.moveTo(x, by); g.quadraticCurveTo(x + dir * tw * 1.5, by - tw, x + dir * tw * 3, by - tw * 2.2); g.stroke();
+          }
+        }
+        if (fog) for (let i = 0; i < 4; i++) glow(g, rand(0, w), rand(0.4, 0.95) * h, w * 0.5, fog, 0.18);
+      };
+      trees(10, 'rgba(30,70,80,0.55)', 10, 18, '90,160,170');
+      trees(7, 'rgba(12,35,40,0.85)', 16, 26, '60,120,130');
+      trees(4, '#030b0c', 26, 40, null);
+      // 地面與發光蘑菇
+      g.fillStyle = '#020807';
+      g.beginPath(); g.moveTo(0, h);
+      for (let x = 0; x <= w + 10; x += 10) g.lineTo(x, h * 0.9 - Math.sin(x * 0.02) * 6 - Math.sin(x * 0.007) * 10);
+      g.lineTo(w, h); g.fill();
+      this.mush = [];
+      for (let i = 0; i < 14; i++) {
+        const x = rand(0, w), y = h * 0.9 - Math.sin(x * 0.02) * 6 - Math.sin(x * 0.007) * 10 + rand(0, 8);
+        const r = rand(4, 10) * sc;
+        this.mush.push({ x, y, r, ph: rand(0, TAU), col: Math.random() < 0.7 ? '90,255,220' : '160,140,255' });
+        g.fillStyle = 'rgba(200,230,220,0.55)'; g.fillRect(x - r * 0.15, y - r * 1.2, r * 0.3, r * 1.2);
+        const mg = g.createRadialGradient(x, y - r * 1.2, 0, x, y - r * 1.2, r);
+        mg.addColorStop(0, 'rgba(220,255,245,0.95)'); mg.addColorStop(1, 'rgba(60,200,180,0.8)');
+        g.fillStyle = mg; g.beginPath(); g.ellipse(x, y - r * 1.2, r, r * 0.55, 0, Math.PI, 0); g.fill();
+      }
+      this.glowImg = bokehSprite('210,255,120');
+      this.flies = [];
+      for (let i = 0; i < (this.low ? 18 : 45); i++) this.flies.push({ x: rand(0, w), y: rand(0.25, 0.95) * h, ph: rand(0, TAU), sp: rand(0.3, 0.8), blink: rand(0, TAU), r: rand(3, 6) * sc, ax: rand(20, 60), ay: rand(10, 30) });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.2, s);
+      for (const f of this.flies) { f.ph += s * f.sp; f.blink += s * rand(1.5, 2.5); }
+      for (const p of this.swarm) { p.x += p.vx * s; p.y += p.vy * s; p.vy -= 10 * s; p.life -= s; }
+      this.swarm = this.swarm.filter((p) => p.life > 0);
+    }
+    draw(g, t, beat, B) {
+      g.drawImage(this.bg.cv, 0, 0, this.w, this.h);
+      g.globalCompositeOperation = 'lighter';
+      for (const m of this.mush) glow(g, m.x, m.y - m.r, m.r * (4 + beat * 2), m.col, 0.25 + 0.1 * Math.sin(t / 700 + m.ph) + this.flash * 0.3);
+      const img = this.glowImg.cv;
+      for (const f of this.flies) {
+        const x = f.x + Math.sin(f.ph) * f.ax, y = f.y + Math.sin(f.ph * 1.7) * f.ay;
+        const a = Math.max(0, Math.sin(f.blink)) * (0.6 + this.flash * 0.6);
+        if (a < 0.02) continue;
+        const r = f.r * (2.5 + beat);
+        g.globalAlpha = Math.min(1, a);
+        g.drawImage(img, x - r, y - r, r * 2, r * 2);
+        g.fillStyle = 'rgba(250,255,200,1)'; g.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
+      }
+      for (const p of this.swarm) {
+        const r = p.r * 2.5;
+        g.globalAlpha = Math.min(1, p.life);
+        g.drawImage(img, p.x - r, p.y - r, r * 2, r * 2);
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d, B) {
+      this.flash = Math.min(1.5, this.flash + 0.25 * d.lines);
+      const n = Math.min(this.low ? 12 : 40, d.lines * (this.low ? 3 : 10));
+      for (let i = 0; i < n; i++) {
+        const side = Math.random() < 0.5 ? B.x - 6 : B.x + B.w + 6;
+        const row = d.rows && d.rows.length ? d.rows[i % d.rows.length].vy : 18;
+        this.swarm.push({ x: side, y: B.y + (row + 0.5) * B.c, vx: (side < B.cx ? -1 : 1) * rand(20, 80), vy: rand(-60, -10), life: rand(1.5, 2.5), r: rand(3, 6) * this.sc });
+      }
+    }
+  }
+
+  // =========================================================
+  // 冰晶洞窟：冰柱晶簇、頂部光柱、焦散光紋、冰晶閃光
+  // =========================================================
+  class IceCave {
+    constructor(low) { this.low = low; this.flash = 0; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#020818'], [0.45, '#06213a'], [1, '#0b3350']]);
+      g.fillRect(0, 0, w, h);
+      glow(g, w * 0.5, 0, w * 0.6, '170,240,255', 0.35);
+      const shard = (x, y, len, wd, ang, a) => {
+        g.save(); g.translate(x, y); g.rotate(ang);
+        const gr = g.createLinearGradient(-wd, 0, wd, 0);
+        gr.addColorStop(0, `rgba(30,90,140,${a})`); gr.addColorStop(0.45, `rgba(170,235,255,${a})`); gr.addColorStop(0.55, `rgba(110,190,235,${a})`); gr.addColorStop(1, `rgba(20,60,110,${a})`);
+        g.fillStyle = gr;
+        g.beginPath(); g.moveTo(-wd, 0); g.lineTo(-wd * 0.7, len * 0.85); g.lineTo(0, len); g.lineTo(wd * 0.7, len * 0.85); g.lineTo(wd, 0); g.closePath(); g.fill();
+        g.strokeStyle = `rgba(220,250,255,${a * 0.8})`; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(0, len); g.stroke();
+        g.restore();
+      };
+      this.tips = [];
+      for (const [depth, a] of [[0.5, 0.35], [0.8, 0.6], [1, 0.9]]) {
+        for (let i = 0; i < 9; i++) {
+          const x = rand(0, w), len = rand(0.08, 0.22) * h * depth, wd = rand(6, 14) * sc * depth;
+          shard(x, -5, len, wd, rand(-0.15, 0.15), a);
+          this.tips.push({ x, y: len, ph: rand(0, TAU) });
+          const bx = rand(0, w), blen = rand(0.06, 0.16) * h * depth;
+          shard(bx, h + 5, blen, wd * 1.2, Math.PI + rand(-0.2, 0.2), a);
+          this.tips.push({ x: bx, y: h - blen, ph: rand(0, TAU) });
+        }
+      }
+      this.sparkles = [];
+      for (let i = 0; i < (this.low ? 25 : 70); i++) this.sparkles.push({ x: rand(0, w), y: rand(0, h), ph: rand(0, TAU), sp: rand(1, 3), s: rand(0.8, 2) });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.15, s);
+      for (const p of this.sparkles) { p.ph += s * p.sp; p.y += 4 * s; if (p.y > this.h) p.y = 0; }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      // 焦散光紋
+      const ts = t / 1000;
+      g.lineWidth = 1.2;
+      for (let k = 0; k < (this.low ? 4 : 8); k++) {
+        g.strokeStyle = `rgba(150,230,255,${0.05 + 0.03 * Math.sin(ts + k)})`;
+        g.beginPath();
+        for (let x = 0; x <= w; x += 12) {
+          const y = h * (0.15 + k * 0.1) + Math.sin(x * 0.02 + ts * 0.8 + k) * 12 + Math.sin(x * 0.05 - ts * 1.3 + k * 2) * 5;
+          x ? g.lineTo(x, y) : g.moveTo(x, y);
+        }
+        g.stroke();
+      }
+      // 冰晶尖端閃光（隨節拍）
+      for (const tp of this.tips) {
+        const a = Math.max(0, Math.sin(ts * 1.5 + tp.ph)) * 0.25 + beat * 0.25 + this.flash * 0.4;
+        if (a > 0.05) glow(g, tp.x, tp.y, 18 * this.sc, '200,245,255', Math.min(0.8, a));
+      }
+      for (const p of this.sparkles) {
+        const a = Math.pow(Math.max(0, Math.sin(p.ph)), 6);
+        if (a < 0.05) continue;
+        g.fillStyle = `rgba(230,250,255,${a})`;
+        g.fillRect(p.x - p.s * 2, p.y - 0.4, p.s * 4, 0.8);
+        g.fillRect(p.x - 0.4, p.y - p.s * 2, 0.8, p.s * 4);
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d) { this.flash = Math.min(1.5, this.flash + 0.3 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
+  }
+
+  // =========================================================
+  // 熔岩：火山剪影、流動的熔岩河、地裂光、上升的火星、濃煙
+  // =========================================================
+  class Lava {
+    constructor(low) { this.low = low; this.flash = 0; this.extra = []; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#070103'], [0.45, '#250705'], [0.75, '#55140a'], [1, '#140302']]);
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 6; i++) glow(g, rand(0, w), rand(0, h * 0.4), w * 0.5, '40,20,20', 0.6);
+      const volcano = (cx, base, wd, ht, color, rim) => {
+        g.fillStyle = color;
+        g.beginPath(); g.moveTo(cx - wd, base); g.quadraticCurveTo(cx - wd * 0.3, base - ht * 0.6, cx - wd * 0.12, base - ht);
+        g.lineTo(cx + wd * 0.12, base - ht); g.quadraticCurveTo(cx + wd * 0.3, base - ht * 0.6, cx + wd, base); g.fill();
+        if (rim) { glow(g, cx, base - ht, wd * 0.5, '255,120,40', 0.45); }
+      };
+      volcano(w * 0.25, h * 0.75, w * 0.45, h * 0.28, '#1b0605', true);
+      volcano(w * 0.8, h * 0.78, w * 0.5, h * 0.22, '#120403', true);
+      g.fillStyle = '#0b0202'; g.fillRect(0, h * 0.78, w, h * 0.22);
+      // 地裂
+      g.lineCap = 'round';
+      for (let i = 0; i < 10; i++) {
+        let x = rand(0, w), y = h * rand(0.8, 0.98);
+        g.strokeStyle = 'rgba(255,110,30,0.7)'; g.lineWidth = rand(1, 2.5);
+        g.beginPath(); g.moveTo(x, y);
+        for (let k = 0; k < 6; k++) { x += rand(-25, 25); y += rand(-6, 6); g.lineTo(x, y); }
+        g.stroke();
+      }
+      this.embers = [];
+      for (let i = 0; i < (this.low ? 30 : 80); i++) this.embers.push(this.newEmber(true));
+    }
+    newEmber(anywhere, x, y) {
+      return { x: x != null ? x : rand(0, this.w), y: y != null ? y : anywhere ? rand(0, this.h) : this.h * rand(0.8, 1), vx: rand(-10, 10), vy: rand(-60, -25), life: rand(2, 5), ph: rand(0, TAU), s: rand(1, 2.4) * this.sc, temp: x != null };
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.15, s);
+      const upd = (p) => { p.x += (p.vx + Math.sin(p.ph) * 12) * s; p.y += p.vy * s; p.ph += s * 2; p.life -= s; };
+      for (const p of this.embers) { upd(p); if (p.life <= 0 || p.y < -10) Object.assign(p, this.newEmber(false)); }
+      for (const p of this.extra) { upd(p); p.vy += 30 * s; }
+      this.extra = this.extra.filter((p) => p.life > 0);
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      const ts = t / 1000;
+      // 熔岩河（流動的光帶）
+      for (let k = 0; k < 4; k++) {
+        const yb = h * (0.84 + k * 0.035);
+        g.strokeStyle = `rgba(255,${120 + k * 30},40,${0.35 + beat * 0.2 + this.flash * 0.3})`;
+        g.lineWidth = (6 - k) * this.sc;
+        g.beginPath();
+        for (let x = 0; x <= w; x += 10) {
+          const y = yb + Math.sin(x * 0.015 - ts * (1 + k * 0.3)) * 6 + Math.sin(x * 0.04 + ts * 2) * 2;
+          x ? g.lineTo(x, y) : g.moveTo(x, y);
+        }
+        g.stroke();
+      }
+      glow(g, w * 0.5, h * 0.92, w * 0.7, '255,90,20', 0.2 + beat * 0.15 + this.flash * 0.3);
+      const drawE = (p) => {
+        const a = Math.min(1, p.life * 0.6) * (0.6 + 0.4 * Math.sin(p.ph * 5));
+        g.fillStyle = `rgba(255,${150 + (Math.sin(p.ph) * 60) | 0},60,${a})`;
+        g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s * 1.6);
+      };
+      for (const p of this.embers) drawE(p);
+      for (const p of this.extra) drawE(p);
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d, B) {
+      this.flash = Math.min(1.5, this.flash + 0.3 * d.lines + (d.lines >= 4 ? 0.5 : 0));
+      const n = Math.min(this.low ? 20 : 70, d.lines * (this.low ? 5 : 18));
+      for (let i = 0; i < n; i++) {
+        const p = this.newEmber(false, rand(0.1, 0.9) * this.w, this.h * 0.9);
+        p.vy = rand(-260, -120); p.vx = rand(-60, 60); p.life = rand(1.2, 2.2);
+        this.extra.push(p);
+      }
+    }
+  }
+
+  // =========================================================
+  // 雨夜：失焦的城市燈光、直式霓虹招牌、雨絲、濕路倒影、閃電
+  // =========================================================
+  class RainyCity {
+    constructor(low) { this.low = low; this.lightning = 0; this.ripples = []; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#04060d'], [0.6, '#0b1322'], [0.82, '#101a2c'], [1, '#05070c']]);
+      g.fillRect(0, 0, w, h);
+      // 樓影
+      for (let i = 0; i < 12; i++) {
+        const bw = rand(30, 70) * sc, bh = rand(0.25, 0.6) * h, x = rand(-20, w);
+        g.fillStyle = `rgba(${rand(10, 20) | 0},${rand(14, 24) | 0},${rand(28, 40) | 0},0.9)`;
+        g.fillRect(x, h * 0.82 - bh, bw, bh);
+        for (let wy = h * 0.82 - bh + 8; wy < h * 0.8; wy += 9) for (let wx = x + 5; wx < x + bw - 5; wx += 8) {
+          if (Math.random() < 0.18) { g.fillStyle = `rgba(255,${rand(180, 230) | 0},150,${rand(0.2, 0.5)})`; g.fillRect(wx, wy, 3, 4); }
+        }
+      }
+      // 失焦光斑
+      const cols = ['255,90,170', '90,200,255', '255,190,90', '160,120,255', '255,255,220'];
+      const bimgs = cols.map((c) => bokehSprite(c));
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 45; i++) {
+        const r = rand(6, 26) * sc;
+        g.globalAlpha = rand(0.15, 0.45);
+        g.drawImage(bimgs[(Math.random() * cols.length) | 0].cv, rand(0, w) - r, rand(0.35, 0.8) * h - r, r * 2, r * 2);
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      // 直式霓虹招牌
+      this.signs = [
+        { x: w * 0.06, y: h * 0.42, text: '麵', col: '255,80,150' },
+        { x: w * 0.9, y: h * 0.36, text: '茶館', col: '90,220,255' },
+        { x: w * 0.2, y: h * 0.62, text: '書店', col: '255,190,80' },
+        { x: w * 0.8, y: h * 0.6, text: '夜市', col: '190,120,255' },
+      ];
+      // 濕路面
+      g.fillStyle = vgrad(g, h, [[0, 'rgba(0,0,0,0)'], [0.82, 'rgba(8,12,22,0.9)'], [1, 'rgba(4,6,12,1)']]);
+      g.fillRect(0, h * 0.82, w, h * 0.18);
+      this.drops = [];
+      for (let i = 0; i < (this.low ? 60 : 150); i++) this.drops.push({ x: rand(0, w * 1.2), y: rand(0, h), v: rand(600, 900) * sc, l: rand(10, 22) * sc, a: rand(0.15, 0.4) });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.lightning *= Math.pow(0.02, s);
+      for (const d of this.drops) {
+        d.y += d.v * s; d.x -= d.v * 0.15 * s;
+        if (d.y > this.h * rand(0.85, 1)) {
+          if (Math.random() < 0.3 && this.ripples.length < 30) this.ripples.push({ x: d.x, y: d.y, t: 0 });
+          d.y = rand(-40, 0); d.x = rand(0, this.w * 1.2);
+        }
+      }
+      for (const r of this.ripples) r.t += s;
+      this.ripples = this.ripples.filter((r) => r.t < 0.6);
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      // 招牌與倒影
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < this.signs.length; i++) {
+        const sg = this.signs[i];
+        const flick = Math.sin(t / 53 + i * 9) > 0.97 ? 0.3 : 1;
+        const a = (0.75 + beat * 0.25) * flick;
+        const fs = 20 * this.sc;
+        const chars = sg.text.split('');
+        const hgt = chars.length * fs * 1.15 + fs * 0.4;
+        glow(g, sg.x, sg.y + hgt / 2, fs * 2.5, sg.col, 0.25 * a);
+        g.strokeStyle = `rgba(${sg.col},${0.8 * a})`; g.lineWidth = 1.5;
+        g.strokeRect(sg.x - fs * 0.7, sg.y, fs * 1.4, hgt);
+        g.font = `700 ${fs}px "Noto Serif TC", "Songti TC", serif`;
+        g.textAlign = 'center'; g.textBaseline = 'top';
+        g.fillStyle = `rgba(${sg.col},${a})`;
+        chars.forEach((c, k) => g.fillText(c, sg.x, sg.y + fs * 0.3 + k * fs * 1.15));
+        // 倒影
+        const ry = h * 0.84 + (h * 0.82 - sg.y) * 0.08;
+        const rg = g.createLinearGradient(0, ry, 0, ry + hgt * 0.8);
+        rg.addColorStop(0, `rgba(${sg.col},${0.25 * a})`); rg.addColorStop(1, `rgba(${sg.col},0)`);
+        g.fillStyle = rg;
+        g.fillRect(sg.x - fs * 0.5 + Math.sin(t / 300 + i) * 2, ry, fs, hgt * 0.8);
+      }
+      // 雨
+      g.strokeStyle = 'rgba(180,200,255,0.35)'; g.lineWidth = 1;
+      g.beginPath();
+      for (const d of this.drops) { g.moveTo(d.x, d.y); g.lineTo(d.x + d.l * 0.15, d.y - d.l); }
+      g.stroke();
+      g.strokeStyle = 'rgba(180,200,255,0.3)';
+      for (const r of this.ripples) {
+        const k = r.t / 0.6;
+        g.globalAlpha = 1 - k;
+        g.beginPath(); g.ellipse(r.x, r.y, 2 + k * 10 * this.sc, 1 + k * 3 * this.sc, 0, 0, TAU); g.stroke();
+      }
+      g.globalAlpha = 1;
+      if (this.lightning > 0.02) { g.fillStyle = `rgba(200,215,255,${this.lightning * 0.35})`; g.fillRect(0, 0, w, h); }
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d) {
+      if (d.lines >= 3 || d.tspin) this.lightning = 1;
+      for (let i = 0; i < d.lines * 6; i++) this.ripples.push({ x: rand(0, this.w), y: this.h * rand(0.85, 1), t: 0 });
+    }
+  }
+
+  root.LumenScenes = {
+    星空: Starfield, 深海: DeepSea, 竹林: Bamboo, 極光: Aurora, 水墨: InkWash, 螢火森林: Firefly, 霓虹都市: NeonCity,
+    敦煌: Dunhuang, 櫻花: Sakura, 冰晶洞窟: IceCave, 燈節: Lantern, 雨夜: RainyCity, 熔岩: Lava, 夕陽雲海: Sunset,
+  };
 })(typeof self !== 'undefined' ? self : this);

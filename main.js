@@ -12,7 +12,7 @@
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, difficulty: 'relaxed', transitions: true,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, difficulty: 'relaxed', transitions: true,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -86,7 +86,7 @@
     Snd.setSfxVolume(settings.sfx);
     if (!audioStarted) {
       audioStarted = true;
-      if (mode === 'menu') Snd.playSong(0, 0);
+      if (mode === 'menu') Snd.playSong(THEMES[0].name, 0);
     }
   }
   window.addEventListener('pointerdown', ensureAudio, { capture: true });
@@ -96,11 +96,17 @@
   const THEMES = [
     { name: '星空', accent: [122, 167, 255], style: 'gem', sub: '在星河之間，靜靜落下' },
     { name: '深海', accent: [77, 232, 255], style: 'glass', sub: '沉入光照不到的地方' },
+    { name: '竹林', accent: [150, 225, 140], style: 'porcelain', sub: '風過竹林，一葉知秋', light: true },
     { name: '極光', accent: [109, 255, 176], style: 'glass', sub: '夜空在呼吸' },
     { name: '水墨', accent: [214, 72, 58], style: 'porcelain', sub: '山色有無中', light: true },
+    { name: '螢火森林', accent: [200, 255, 120], style: 'glass', sub: '森林在夜裡發光' },
     { name: '霓虹都市', accent: [255, 93, 230], style: 'neon', sub: '午夜的城市不睡' },
+    { name: '敦煌', accent: [240, 180, 90], style: 'gold', sub: '飛天的彩帶穿過千年' },
     { name: '櫻花', accent: [255, 166, 216], style: 'soft', sub: '花落知多少' },
+    { name: '冰晶洞窟', accent: [150, 230, 255], style: 'glass', sub: '光在冰裡迷了路' },
     { name: '燈節', accent: [255, 170, 60], style: 'gold', sub: '東風夜放花千樹' },
+    { name: '雨夜', accent: [120, 180, 255], style: 'neon', sub: '霓虹在雨裡暈開' },
+    { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
   ];
   let themeIdx = 0;
@@ -112,7 +118,7 @@
 
   function getScene(i) {
     if (!scenes[i]) {
-      scenes[i] = new SCENES[i](settings.fx === 'low');
+      scenes[i] = new SCENES[THEMES[i].name](settings.fx === 'low');
       scenes[i].resize(vw, vh);
     }
     return scenes[i];
@@ -253,8 +259,11 @@
     portrait = vh > vw * 1.05;
     const buttons = settings.controls === 'buttons';
     // 螢幕按鍵尺寸（左手區：硬降 / 間隔 / ◀▶ / ▼）
-    const rs = Math.round(Math.min(56, Math.max(44, vh * 0.062)));
-    const rb = Math.round(Math.min(100, Math.max(76, vh * 0.108)));
+    const bs = Math.max(0.7, Math.min(1.4, +settings.btnScale || 1));
+    const rs = Math.round(Math.min(56, Math.max(44, vh * 0.062)) * bs);
+    const rb = Math.round(Math.min(100, Math.max(76, vh * 0.108)) * bs);
+    touchEl.style.setProperty('--padw', `${Math.round(Math.min(vw * 0.485, Math.min(vw * 0.44, 212) * bs))}px`);
+    touchEl.style.setProperty('--bfs', String(bs));
     const hdGap = Math.max(0, (settings.hdGap | 0) - 16); // 扣掉格線間距，讓設定值 = 實際距離
     touchEl.style.setProperty('--rs', rs + 'px');
     touchEl.style.setProperty('--rb', rb + 'px');
@@ -433,7 +442,7 @@
       }
       case 'levelUp': {
         const idx = (d.level - 1) % THEMES.length;
-        Snd.playSong(idx, musicStage(), musicRate());
+        Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
         Snd.play('levelUp');
         if (settings.transitions && mode === 'playing') {
           startTransition(idx, d.level);
@@ -474,7 +483,7 @@
     setTheme(idx);
     Snd.setMuffled(false);
     Snd.setBoost(0);
-    Snd.playSong(idx, musicStage(), musicRate());
+    Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
     showOverlay(null);
     touchEl.classList.toggle('hidden', settings.controls === 'off');
@@ -495,7 +504,7 @@
     $('best-score').textContent = getBest().toLocaleString();
     setTheme(0);
     Snd.setMuffled(false);
-    if (audioStarted) Snd.playSong(0, 0);
+    if (audioStarted) Snd.playSong(THEMES[0].name, 0);
     releaseWake();
   }
   // ================= 過關過場 =================
@@ -898,6 +907,7 @@
         aberr: fx.aberr,
         vig: 0.45,
         flash: fx.flash,
+        grain: 0.035,
         waves: fx.waves.slice(-3).map((w) => {
           const k = w.t / w.life;
           return { x: w.x, y: w.y, r: k * 1.1, s: w.s * (1 - k) };
@@ -947,7 +957,8 @@
     mkSlider('音效音量', 'sfx', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSeg('難度曲線（下一局生效）', 'difficulty', [['relaxed', '輕鬆'], ['normal', '標準'], ['classic', '經典']]);
     mkSeg('過關過場', 'transitions', [[true, '開'], [false, '關']]);
-    mkSlider('起始等級', 'startLevel', 1, 16, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
+    mkSlider('按鍵大小', 'btnScale', 0.7, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`);
+    mkSlider('起始等級', 'startLevel', 1, THEMES.length, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
     mkSlider('硬降鍵與 ◀ 的距離', 'hdGap', 16, 96, 2, (v) => `${v} px`);

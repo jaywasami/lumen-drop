@@ -13,6 +13,8 @@
     lydian: [0, 2, 4, 6, 7, 9, 11],
     gong: [0, 2, 4, 7, 9], // 五聲音階：宮調
     zhi: [0, 2, 5, 7, 9], // 五聲音階：徵調
+    phrygian: [0, 1, 3, 5, 7, 8, 10],
+    hijaz: [0, 1, 4, 5, 7, 8, 10], // 西域風
   };
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -111,6 +113,72 @@
       leadSeq: [
         [[0, 4, 3], [3, 5, 3], [6, 4, 2], [8, 2, 8], [16, 4, 3], [19, 5, 3], [22, 7, 2], [24, 6, 8]],
         [[0, 7, 3], [3, 6, 3], [6, 4, 2], [8, 5, 8], [16, 4, 4], [20, 2, 4], [24, 1, 8]],
+      ],
+    },
+    {
+      name: '竹林', bpm: 80, root: 60, scale: 'gong', prog: [0, 3, 4, 2], sevenths: false, vol: 0.85,
+      pad: 'warm', arp: 'qin', bass: 'round', lead: 'xiao', arpOct: 0, bassOct: -2, leadOct: 0, wet: 1.35,
+      arpSeq: [0, -1, -1, 2, -1, -1, 4, -1, 3, -1, -1, 1, -1, -1, 2, -1],
+      bassSeq: 'R-------R-------',
+      drums: { woodblock: '....x.......x...', shaker: '..x...x...x...x.' },
+      leadSeq: [
+        [[0, 7, 8], [8, 9, 4], [12, 8, 4], [16, 7, 6], [22, 6, 2], [24, 5, 8]],
+        [[0, 10, 6], [6, 9, 2], [8, 8, 8], [16, 9, 4], [20, 7, 4], [24, 6, 8]],
+      ],
+    },
+    {
+      name: '敦煌', bpm: 96, root: 57, scale: 'hijaz', prog: [0, 1, 0, 6], sevenths: false, swing: 0.05, vol: 0.85,
+      pad: 'choir', arp: 'oud', bass: 'round', lead: 'erhu', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.1,
+      arpSeq: [0, 1, 2, 1, 0, -1, 2, 3, 4, 3, 2, -1, 1, 2, 1, 0],
+      bassSeq: 'R--R--R-R--R-5--',
+      drums: { tom: 'x..x..x...x.x...', rim: '..x...x...x...x.', cymbal: '........x.......' },
+      leadSeq: [
+        [[0, 4, 3], [3, 5, 1], [4, 4, 4], [8, 2, 2], [10, 1, 2], [12, 0, 4], [16, 1, 6], [22, 2, 2], [24, 4, 8]],
+        [[0, 7, 4], [4, 6, 2], [6, 5, 2], [8, 4, 8], [16, 5, 3], [19, 4, 1], [20, 2, 4], [24, 1, 8]],
+      ],
+    },
+    {
+      name: '螢火森林', bpm: 92, root: 65, scale: 'major', prog: [0, 5, 3, 4], sevenths: true,
+      pad: 'glass', arp: 'kalimba', bass: 'round', lead: 'soft', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.2,
+      arpSeq: [0, -1, 2, 4, -1, 2, 5, -1, 4, -1, 2, 4, -1, 6, -1, 4],
+      bassSeq: 'R-----R-5-----O-',
+      drums: { kickSoft: 'x.......x.......', shaker: 'x.x.x.x.x.x.x.x.', rim: '....x.......x...' },
+      leadSeq: [
+        [[0, 4, 4], [4, 5, 2], [6, 4, 2], [8, 2, 8], [16, 0, 4], [20, 1, 4], [24, 2, 8]],
+        [[0, 7, 4], [4, 6, 2], [6, 4, 2], [8, 5, 8], [16, 4, 4], [20, 2, 4], [24, 4, 8]],
+      ],
+    },
+    {
+      name: '冰晶洞窟', bpm: 84, root: 61, scale: 'minor', prog: [0, 5, 2, 6], sevenths: true,
+      pad: 'glass', arp: 'celesta', bass: 'sub', lead: 'soft', arpOct: 1, bassOct: -2, leadOct: 1, wet: 1.5,
+      arpSeq: [0, -1, 4, -1, 2, -1, 6, -1, 4, -1, 2, -1, 5, -1, 3, -1],
+      bassSeq: 'R-------R---5---',
+      drums: { kickSoft: 'x.........x.....', snare: '....x.......x...', hat: '..x.....x.x...x.' },
+      leadSeq: [
+        [[0, 7, 6], [6, 6, 2], [8, 4, 8], [16, 5, 6], [22, 4, 2], [24, 2, 8]],
+        [[0, 4, 4], [4, 6, 4], [8, 7, 8], [16, 9, 4], [20, 8, 4], [24, 7, 8]],
+      ],
+    },
+    {
+      name: '雨夜', bpm: 78, root: 60, scale: 'dorian', prog: [0, 3, 1, 4], sevenths: true, swing: 0.16, rain: true,
+      pad: 'warm', arp: 'epiano', bass: 'round', lead: 'soft', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.2,
+      arpSeq: [0, -1, -1, 2, -1, 1, -1, 3, -1, -1, 2, -1, 4, -1, 3, -1],
+      bassSeq: 'R------5R---3---',
+      drums: { kickSoft: 'x......x..x.....', rim: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' },
+      leadSeq: [
+        [[0, 4, 3], [3, 6, 3], [6, 7, 2], [8, 6, 8], [16, 4, 4], [20, 2, 4], [24, 3, 8]],
+        [[0, 9, 4], [4, 7, 4], [8, 6, 6], [14, 4, 2], [16, 3, 8], [24, 2, 8]],
+      ],
+    },
+    {
+      name: '熔岩', bpm: 132, root: 52, scale: 'phrygian', prog: [0, 1, 0, 6], sevenths: false, pump: true, vol: 0.85,
+      pad: 'saw', arp: 'pluck', bass: 'saw', lead: 'saw', arpOct: 1, bassOct: -1, leadOct: 1, wet: 0.8,
+      arpSeq: [0, 0, 2, 0, 1, 0, 2, 4, 0, 0, 2, 0, 3, 2, 1, 0],
+      bassSeq: 'R-RRR-RRR-RRR-O-',
+      drums: { kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', tom: '..............xx', clap: '....x.......x...' },
+      leadSeq: [
+        [[0, 4, 2], [2, 3, 2], [4, 1, 4], [8, 0, 4], [12, 1, 4], [16, 4, 2], [18, 5, 2], [20, 4, 4], [24, 3, 8]],
+        [[0, 7, 4], [4, 5, 4], [8, 4, 4], [12, 3, 4], [16, 1, 8], [24, 0, 8]],
       ],
     },
   ];
@@ -344,6 +412,11 @@
         glass: { waves: [['triangle', 0, 0.6], ['sine', 0, 0.3, 2]], d: 0.6, peak: 0.07, wet: 0.55 },
         koto: { waves: [['triangle', 0, 0.7], ['sawtooth', 0, 0.15]], cut: 2400, cutEnv: 2.5, cutTime: 0.2, pitchFrom: 1.025, glide: 0.06, d: 0.75, peak: 0.08, wet: 0.4 },
         zheng: { waves: [['triangle', 0, 0.65], ['sawtooth', 0, 0.18], ['sine', 0, 0.2, 2]], cut: 3000, cutEnv: 2, cutTime: 0.25, pitchFrom: 0.985, glide: 0.07, d: 1.4, peak: 0.085, wet: 0.5 },
+        qin: { waves: [['triangle', 0, 0.75], ['sine', 0, 0.3, 2]], cut: 1600, cutEnv: 1.6, cutTime: 0.3, pitchFrom: 0.97, glide: 0.12, d: 2.0, peak: 0.1, wet: 0.55 },
+        kalimba: { waves: [['sine', 0, 0.85], ['sine', 0, 0.12, 5.4]], a: 0.002, d: 0.9, peak: 0.09, wet: 0.5 },
+        oud: { waves: [['sawtooth', 0, 0.4], ['triangle', 0, 0.5]], cut: 2200, cutEnv: 2, cutTime: 0.1, pitchFrom: 1.03, glide: 0.05, d: 0.6, peak: 0.08, wet: 0.4 },
+        celesta: { waves: [['sine', 0, 0.75], ['sine', 0, 0.2, 4], ['triangle', 0, 0.1, 2]], d: 1.5, peak: 0.07, wet: 0.75 },
+        epiano: { waves: [['sine', 0, 0.8], ['triangle', 0, 0.12, 2], ['sine', 0, 0.06, 7]], a: 0.004, d: 1.3, peak: 0.08, wet: 0.45 },
         pipa: { waves: [['triangle', 0, 0.6], ['sawtooth', 0, 0.25]], cut: 3500, cutEnv: 1.8, cutTime: 0.08, d: 0.35, peak: 0.075, wet: 0.35 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f, peak: P.peak * v, out }));
@@ -365,11 +438,12 @@
         saw: { waves: [['sawtooth', -6, 0.4], ['sawtooth', 6, 0.4]], cut: 2200, a: 0.02, s: 0.7, r: 0.25, vib: [5.5, 0.005], peak: 0.045, wet: 0.5 },
         flute: { waves: [['sine', 0, 0.8], ['triangle', 0, 0.15, 2]], a: 0.07, s: 0.8, r: 0.3, vib: [4.5, 0.007], peak: 0.08, wet: 0.6 },
         whale: { waves: [['sine', 0, 1], ['triangle', 0, 0.2]], pitchFrom: 0.94, glide: 0.35, a: 0.35, s: 0.85, r: 1.2, vib: [3, 0.01], peak: 0.07, wet: 0.85 },
+        xiao: { waves: [['sine', 0, 0.9], ['triangle', 0, 0.1, 2]], pitchFrom: 0.97, glide: 0.15, a: 0.1, s: 0.8, r: 0.5, vib: [4, 0.007], peak: 0.09, wet: 0.7 },
         dizi: { waves: [['sine', 0, 0.85], ['triangle', 0, 0.12, 2]], pitchFrom: 1.06, glide: 0.07, a: 0.05, s: 0.8, r: 0.25, vib: [5.5, 0.008], peak: 0.085, wet: 0.55 },
         erhu: { waves: [['sawtooth', -4, 0.45], ['sawtooth', 4, 0.35]], cut: 1700, q: 1.2, pitchFrom: 0.955, glide: 0.14, a: 0.08, s: 0.85, r: 0.3, vib: [6, 0.011], peak: 0.05, wet: 0.5 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f, dur, out, peak: P.peak * (vel || 1) }));
-      if (timbre === 'flute' || timbre === 'dizi') this.noise({ t, ftype: 'bandpass', freq: f * 2, q: 3, a: 0.05, d: Math.min(dur, 0.4), peak: 0.012, out });
+      if (timbre === 'flute' || timbre === 'dizi' || timbre === 'xiao') this.noise({ t, ftype: 'bandpass', freq: f * 2, q: 3, a: 0.05, d: Math.min(dur, 0.4), peak: 0.012, out });
     },
 
     drum(kind, t, vel, out) {
@@ -459,6 +533,7 @@
     playSong(idx, stage, rate) {
       this.init();
       if (!this.ctx) return;
+      if (typeof idx === 'string') idx = Math.max(0, SONGS.findIndex((x) => x.name === idx));
       rate = rate || 1;
       const cur = this.current();
       if (cur && cur.idx === idx && cur.rate === rate) { this.setStage(stage || 0); return; }
@@ -604,6 +679,7 @@
           }
         }
       }
+      if (song.rain && s16 === 0) this.noise({ t, ftype: 'bandpass', freq: 2600, q: 0.4, a: 0.6, d: p.stepDur * 17, peak: 0.045, out: p.outDrum, wet: 0.2 });
       if (song.gong && stage >= 3 && s16 === 0 && bar % 4 === 0) this.drum('gong', t, 1, p.outDrum);
       // 高潮層：16 分音符鼓點、每 4 小節一記鈸、大鼓推進
       if (hot && stage >= 2) {
