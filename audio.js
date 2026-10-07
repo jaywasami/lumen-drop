@@ -15,11 +15,14 @@
     zhi: [0, 2, 5, 7, 9], // 五聲音階：徵調
     phrygian: [0, 1, 3, 5, 7, 8, 10],
     hijaz: [0, 1, 4, 5, 7, 8, 10], // 西域風
+    gyemyeon: [0, 3, 5, 7, 10], // 韓國界面調（哀愁的五聲小調）
   };
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
   // 鼓組各聲部最早出現的階段
-  const DRUM_STAGE = { kick: 2, kickSoft: 2, tom: 2, hat: 2, shaker: 2, tanggu: 2, woodblock: 2, snare: 3, clap: 3, rim: 3, ohat: 3, cymbal: 3 };
+  const DRUM_STAGE = { kick: 2, kickSoft: 2, tom: 2, hat: 2, shaker: 2, tanggu: 2, woodblock: 2, janggu: 2, jangguHi: 2, buk: 2, snare: 3, clap: 3, rim: 3, ohat: 3, cymbal: 3 };
+  // 鼓組在立體聲中的位置（-1 左、1 右）
+  const DRUM_PAN = { hat: 0.3, ohat: 0.3, shaker: -0.3, rim: -0.2, woodblock: 0.25, jangguHi: 0.25, janggu: -0.15, tom: -0.2, cymbal: 0.2 };
 
   // ================= 曲目 =================
   // prog：每小節和弦根音（音階級數，0 起算）
@@ -258,6 +261,40 @@
         [[0, 8, 2], [2, 9, 2], [4, 10, 4], [8, 9, 4], [12, 8, 4], [16, 7, 4], [20, 5, 4], [24, 5, 8]],
       ],
     },
+    // ---------- 韓風 ----------
+    {
+      name: '景福宮', bpm: 92, root: 63, scale: 'zhi', prog: [0, 3, 1, 4], sevenths: false, gong: true, epic: 'eastern', swing: 0.12, vol: 0.85,
+      pad: 'warm', arp: 'gayageum', bass: 'round', lead: 'daegeum', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.25,
+      arpSeq: [0, -1, 1, 2, -1, 3, -1, 2, 4, -1, 3, -1, 2, 1, -1, -1],
+      bassSeq: 'R-------5---R---',
+      drums: { janggu: 'x.....x...x.....', jangguHi: '...x....x...x.x.' },
+      leadSeq: [
+        [[0, 5, 6], [6, 6, 2], [8, 5, 4], [12, 4, 4], [16, 3, 6], [22, 4, 2], [24, 2, 8]],
+        [[0, 7, 4], [4, 8, 4], [8, 7, 6], [14, 6, 2], [16, 5, 4], [20, 4, 4], [24, 5, 8]],
+      ],
+    },
+    {
+      name: '韓屋月夜', bpm: 70, root: 57, scale: 'gyemyeon', prog: [0, 3, 2, 4], sevenths: false, gong: true, epic: 'eastern', swing: 0.08, vol: 0.85,
+      pad: 'warm', arp: 'gayageum', bass: 'sub', lead: 'haegeum', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.45,
+      arpSeq: [0, -1, -1, 2, -1, -1, 4, -1, 3, -1, -1, 2, -1, 1, -1, -1],
+      bassSeq: 'R-------R-------',
+      drums: { buk: 'x.......x.....x.', jangguHi: '....x.......x...' },
+      leadSeq: [
+        [[0, 7, 8], [8, 6, 4], [12, 5, 4], [16, 4, 6], [22, 5, 2], [24, 3, 8]],
+        [[0, 8, 4], [4, 9, 4], [8, 8, 6], [14, 7, 2], [16, 6, 4], [20, 5, 4], [24, 4, 8]],
+      ],
+    },
+    {
+      name: '首爾夜光', bpm: 124, root: 54, scale: 'minor', prog: [5, 3, 0, 6], sevenths: true, pump: true, vol: 0.85,
+      pad: 'saw', arp: 'pluck', bass: '808', lead: 'chop', arpOct: 1, bassOct: -1, leadOct: 1, wet: 0.9,
+      arpSeq: [0, -1, 4, 2, -1, 4, 0, -1, 2, -1, 4, 2, -1, 5, 4, -1],
+      bassSeq: 'R--R--R-R--R-5-O',
+      drums: { kick: 'x...x...x...x...', clap: '....x.......x...', hat: 'x.xxx.x.x.xxx.x.', ohat: '..x...x...x...x.' },
+      leadSeq: [
+        [[0, 4, 2], [2, 4, 2], [4, 5, 2], [6, 4, 2], [8, 2, 4], [12, 1, 2], [14, 2, 2], [16, 4, 6], [22, 5, 2], [24, 4, 8]],
+        [[0, 7, 2], [2, 7, 2], [4, 6, 2], [6, 4, 4], [10, 5, 2], [12, 4, 4], [16, 2, 8], [24, 0, 8]],
+      ],
+    },
   ];
 
   function degToMidi(song, deg, oct) {
@@ -266,6 +303,23 @@
     const o = Math.floor(deg / n);
     const d = ((deg % n) + n) % n;
     return song.root + s[d] + 12 * (o + (oct || 0));
+  }
+  // 聲部連接：在轉位與八度之間挑一個和上一個和弦最接近、且不偏離中心音域的排法
+  function voiceLead(chord, prev, center) {
+    const n = chord.length;
+    const cands = [];
+    for (let inv = 0; inv < n; inv++) {
+      const v = chord.slice(inv).concat(chord.slice(0, inv).map((m) => m + 12));
+      for (const sh of [-12, 0, 12]) cands.push(v.map((m) => m + sh));
+    }
+    let best = cands[0], bestCost = Infinity;
+    for (const v of cands) {
+      const mean = v.reduce((a, b) => a + b, 0) / n;
+      let cost = Math.abs(mean - center) * 0.6;
+      if (prev && prev.length === n) for (let i = 0; i < n; i++) cost += Math.abs(v[i] - prev[i]);
+      if (cost < bestCost) { bestCost = cost; best = v; }
+    }
+    return best;
   }
   function chordMidis(song, rootDeg, oct, size) {
     const n = size || (song.sevenths ? 4 : 3);
@@ -301,25 +355,41 @@
       this.masterFilter.type = 'lowpass';
       this.masterFilter.frequency.value = 20000;
       this.masterFilter.Q.value = 0.6;
+      // 母帶：溫和的膠水壓縮 → 低頻飽滿 / 高頻空氣感 → 防爆音限幅
       const comp = c.createDynamicsCompressor();
-      comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
+      comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 2.5; comp.attack.value = 0.012; comp.release.value = 0.25;
+      const lowShelf = c.createBiquadFilter(); lowShelf.type = 'lowshelf'; lowShelf.frequency.value = 110; lowShelf.gain.value = 2.5;
+      const air = c.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 9000; air.gain.value = 2;
+      const mud = c.createBiquadFilter(); mud.type = 'peaking'; mud.frequency.value = 320; mud.Q.value = 0.9; mud.gain.value = -2.5;
+      const limiter = c.createDynamicsCompressor();
+      limiter.threshold.value = -4; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.12;
       this.master = c.createGain();
-      this.master.gain.value = 0.82;
-      this.masterFilter.connect(comp); comp.connect(this.master); this.master.connect(c.destination);
+      this.master.gain.value = 0.9;
+      this.masterFilter.connect(comp); comp.connect(lowShelf); lowShelf.connect(mud); mud.connect(air); air.connect(limiter); limiter.connect(this.master); this.master.connect(c.destination);
 
       // 效果：延遲 + 殘響（音樂與音效共用）
+      // 殘響：預延遲 + 立體聲、越後面越暗的空間；延遲：左右來回的乒乓回音
       this.fxIn = c.createGain();
+      const pre = c.createDelay(0.1); pre.delayTime.value = 0.022;
       this.reverb = c.createConvolver();
-      this.reverb.buffer = this.makeImpulse(2.8);
+      this.reverb.buffer = this.makeImpulse(3.2);
+      const revLo = c.createBiquadFilter(); revLo.type = 'highpass'; revLo.frequency.value = 180; // 殘響不要糊低頻
       this.delay = c.createDelay(2);
       this.delay.delayTime.value = 0.375;
-      const fb = c.createGain(); fb.gain.value = 0.32;
-      const dlp = c.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
+      this.delayR = c.createDelay(2);
+      this.delayR.delayTime.value = 0.375;
+      const fb = c.createGain(); fb.gain.value = 0.3;
+      const dlp = c.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 3000;
+      const dhp = c.createBiquadFilter(); dhp.type = 'highpass'; dhp.frequency.value = 250;
+      const merge = c.createChannelMerger(2);
+      const dret = c.createGain(); dret.gain.value = 0.55;
       const ret = c.createGain(); ret.gain.value = 0.85;
-      this.fxIn.connect(this.reverb);
-      this.fxIn.connect(this.delay);
-      this.delay.connect(dlp); dlp.connect(fb); fb.connect(this.delay);
-      dlp.connect(this.reverb); dlp.connect(ret);
+      this.fxIn.connect(pre); pre.connect(revLo); revLo.connect(this.reverb);
+      this.fxIn.connect(dhp); dhp.connect(this.delay);
+      this.delay.connect(dlp); dlp.connect(this.delayR); this.delayR.connect(fb); fb.connect(this.delay);
+      dlp.connect(merge, 0, 0); this.delayR.connect(merge, 0, 1);
+      merge.connect(dret); dret.connect(ret);
+      dret.connect(this.reverb);
       this.reverb.connect(ret);
       ret.connect(this.masterFilter);
 
@@ -347,9 +417,21 @@
       const c = this.ctx;
       const len = Math.floor(c.sampleRate * sec);
       const buf = c.createBuffer(2, len, c.sampleRate);
+      const sr = c.sampleRate;
       for (let ch = 0; ch < 2; ch++) {
         const d = buf.getChannelData(ch);
-        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+        // 漫射尾巴：雜訊經一階低通，低通係數隨時間變大 → 高頻比低頻先消失，聽起來溫暖不刺耳
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const k = i / len;
+          const cut = 0.85 - 0.75 * Math.pow(k, 0.6);
+          lp += (Math.random() * 2 - 1 - lp) * cut;
+          const env = Math.pow(1 - k, 2.2) * (i < sr * 0.012 ? i / (sr * 0.012) : 1);
+          d[i] = lp * env * 1.4;
+        }
+        // 早期反射：左右聲道不同的幾個離散回音，增加空間定位感
+        const taps = ch ? [0.013, 0.021, 0.034, 0.047, 0.061] : [0.009, 0.017, 0.029, 0.041, 0.055];
+        taps.forEach((tt, j) => { const i = Math.floor(tt * sr); if (i < len) d[i] += (j % 2 ? -1 : 1) * (0.5 - j * 0.07); });
       }
       return buf;
     },
@@ -468,6 +550,7 @@
 
     // ---------- 樂器 ----------
     pad(t, midis, dur, timbre, out, vel) {
+      const outs = Array.isArray(out) ? out : [out];
       const n = midis.length;
       const v = (vel || 1) / Math.sqrt(n);
       const P = {
@@ -477,7 +560,7 @@
         choir: { waves: [['sawtooth', -6, 0.4], ['sawtooth', 6, 0.4], ['sine', 0, 0.3, 2]], cut: 1100, q: 2.2, a: 0.8, r: 1.6, peak: 0.055, wet: 0.65 },
         stab: { waves: [['sawtooth', -8, 0.5], ['square', 8, 0.2]], cut: 900, cutEnv: 4, cutTime: 0.12, d: 0.32, peak: 0.065, wet: 0.35 },
       }[timbre];
-      for (const m of midis) this.synth(Object.assign({}, P, { t, f: mtof(m), dur, peak: P.peak * v, out }));
+      midis.forEach((m, i) => this.synth(Object.assign({}, P, { t, f: mtof(m), dur, peak: P.peak * v, out: outs[i % outs.length] })));
     },
 
     pluck(t, midi, timbre, out, vel) {
@@ -496,17 +579,20 @@
         celesta: { waves: [['sine', 0, 0.75], ['sine', 0, 0.2, 4], ['triangle', 0, 0.1, 2]], d: 1.5, peak: 0.07, wet: 0.75 },
         epiano: { waves: [['sine', 0, 0.8], ['triangle', 0, 0.12, 2], ['sine', 0, 0.06, 7]], a: 0.004, d: 1.3, peak: 0.08, wet: 0.45 },
         pipa: { waves: [['triangle', 0, 0.6], ['sawtooth', 0, 0.25]], cut: 3500, cutEnv: 1.8, cutTime: 0.08, d: 0.35, peak: 0.075, wet: 0.35 },
+        // 伽倻琴：絲弦溫暖的撥奏，餘音帶「弄絃」揉音
+        gayageum: { waves: [['triangle', 0, 0.7], ['sine', 0, 0.25, 2], ['sawtooth', 0, 0.08]], cut: 2600, cutEnv: 2.2, cutTime: 0.18, pitchFrom: 0.988, glide: 0.06, vib: [5.2, 0.011], d: 1.25, peak: 0.09, wet: 0.5 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f, peak: P.peak * v, out }));
     },
 
     // 弦樂團：五把鋸齒波微微走音疊在一起，慢起慢收
     strings(t, midis, dur, vel, out) {
+      const outs = Array.isArray(out) ? out : [out];
       const v = vel / Math.sqrt(midis.length);
-      for (const m of midis) {
+      midis.forEach((m, i) => {
         this.synth({ t, f: mtof(m), dur, waves: [['sawtooth', -16, 0.22], ['sawtooth', -7, 0.22], ['sawtooth', 0, 0.22], ['sawtooth', 8, 0.22], ['sawtooth', 15, 0.22]],
-          cut: 1300 + vel * 1700, q: 0.5, a: 0.45, s: 0.9, r: 1.1, peak: 0.05 * v, out, wet: 0.6 });
-      }
+          cut: 1300 + vel * 1700, q: 0.5, a: 0.45, s: 0.9, r: 1.1, vib: [5, 0.003], peak: 0.05 * v, out: outs[i % outs.length], wet: 0.6 });
+      });
     },
     // 銅管重音：濾波器快速打開再收回
     brass(t, midis, dur, vel, out) {
@@ -522,6 +608,7 @@
         sub: { waves: [['sine', 0, 1], ['triangle', 0, 0.25]], a: 0.01, s: 0.8, r: 0.12, peak: 0.22 },
         saw: { waves: [['sawtooth', 0, 0.6], ['sawtooth', -7, 0.4]], cut: 380, cutEnv: 4, cutTime: 0.1, q: 4, a: 0.005, s: 0.6, r: 0.08, peak: 0.12 },
         round: { waves: [['triangle', 0, 1], ['sine', 0, 0.5]], cut: 900, a: 0.01, s: 0.7, r: 0.1, peak: 0.2 },
+        808: { waves: [['sine', 0, 1], ['triangle', 0, 0.22]], pitchFrom: 1.35, glide: 0.07, a: 0.004, s: 0.85, r: 0.18, peak: 0.26 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f: mtof(midi), dur, out, wet: 0.04 }));
     },
@@ -537,9 +624,16 @@
         suona: { waves: [['square', 0, 0.35], ['sawtooth', 0, 0.45]], ftype: 'bandpass', cut: 1500, q: 1.6, pitchFrom: 0.94, glide: 0.08, a: 0.03, s: 0.85, r: 0.2, vib: [6, 0.012], peak: 0.09, wet: 0.4 },
         dizi: { waves: [['sine', 0, 0.85], ['triangle', 0, 0.12, 2]], pitchFrom: 1.06, glide: 0.07, a: 0.05, s: 0.8, r: 0.25, vib: [5.5, 0.008], peak: 0.085, wet: 0.55 },
         erhu: { waves: [['sawtooth', -4, 0.45], ['sawtooth', 4, 0.35]], cut: 1700, q: 1.2, pitchFrom: 0.955, glide: 0.14, a: 0.08, s: 0.85, r: 0.3, vib: [6, 0.011], peak: 0.05, wet: 0.5 },
+        // 大笒：低沉帶氣聲的竹笛，起音往上滑、揉音寬而慢
+        daegeum: { waves: [['sine', 0, 0.85], ['triangle', 0, 0.16, 2], ['sawtooth', 0, 0.03, 3]], pitchFrom: 0.94, glide: 0.2, a: 0.09, s: 0.82, r: 0.45, vib: [4.4, 0.013], peak: 0.085, wet: 0.65 },
+        // 奚琴：鼻音較重的拉弦
+        haegeum: { waves: [['sawtooth', -3, 0.5], ['sawtooth', 5, 0.3]], ftype: 'bandpass', cut: 1250, q: 2.2, pitchFrom: 0.95, glide: 0.16, a: 0.09, s: 0.85, r: 0.35, vib: [6.4, 0.014], peak: 0.085, wet: 0.55 },
+        // K-pop 人聲切片風格的主旋律
+        chop: { waves: [['sawtooth', -7, 0.4], ['square', 7, 0.25], ['sine', 0, 0.3, 2]], ftype: 'bandpass', cut: 1400, cutEnv: 1.8, cutTime: 0.08, q: 2.5, a: 0.008, s: 0.6, r: 0.12, vib: [6, 0.004], peak: 0.07, wet: 0.45 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f, dur, out, peak: P.peak * (vel || 1) }));
       if (timbre === 'flute' || timbre === 'dizi' || timbre === 'xiao') this.noise({ t, ftype: 'bandpass', freq: f * 2, q: 3, a: 0.05, d: Math.min(dur, 0.4), peak: 0.012, out });
+      if (timbre === 'daegeum') this.noise({ t, ftype: 'bandpass', freq: f * 1.5, q: 2, a: 0.08, d: Math.min(dur, 0.6), peak: 0.022 * (vel || 1), out, wet: 0.4 });
     },
 
     drum(kind, t, vel, out) {
@@ -605,6 +699,18 @@
         case 'crash':
           this.noise({ t, freq: 3200, d: 1.7, peak: 0.1 * v, out, wet: 0.45 });
           break;
+        case 'janggu': // 長鼓左面「宮」：低沉圓潤
+          this.synth({ t, f: 96, pitchFrom: 1.45, glide: 0.08, waves: [['sine', 0, 1], ['triangle', 0, 0.2, 1.5]], d: 0.45, peak: 0.42 * v, out, wet: 0.25 });
+          this.noise({ t, ftype: 'lowpass', freq: 900, d: 0.05, peak: 0.08 * v, out });
+          break;
+        case 'jangguHi': // 長鼓右面「德」：竹鞭清脆的拍擊
+          this.noise({ t, ftype: 'bandpass', freq: 2200, q: 1.8, d: 0.06, peak: 0.16 * v, out, wet: 0.25 });
+          this.synth({ t, f: 340, pitchFrom: 1.3, glide: 0.02, waves: [['triangle', 0, 1]], d: 0.07, peak: 0.12 * v, out });
+          break;
+        case 'buk': // 韓國桶鼓：深沉
+          this.synth({ t, f: 58, pitchFrom: 1.7, glide: 0.12, waves: [['sine', 0, 1]], d: 0.7, peak: 0.6 * v, out, wet: 0.3 });
+          this.noise({ t, ftype: 'lowpass', freq: 450, d: 0.1, peak: 0.14 * v, out });
+          break;
       }
     },
 
@@ -627,6 +733,18 @@
       p.duckWet = c.createGain(); p.duckWet.connect(p.fadeWet);
       p.outMain = { dry: p.duck, wet: p.duckWet };
       p.outDrum = { dry: p.fadeDry, wet: p.fadeWet };
+      // 立體聲：琶音左右交錯、和弦聲部分散、鼓組各就各位
+      const panned = (dest, wet, pan) => {
+        if (!c.createStereoPanner) return { dry: dest, wet };
+        const sp = c.createStereoPanner(); sp.pan.value = pan; sp.connect(dest);
+        return { dry: sp, wet };
+      };
+      p.outL = panned(p.duck, p.duckWet, -0.6);
+      p.outR = panned(p.duck, p.duckWet, 0.6);
+      p.outWide = [p.outL, p.outMain, p.outR];
+      p.drumPan = {};
+      for (const k in DRUM_PAN) p.drumPan[k] = panned(p.fadeDry, p.fadeWet, DRUM_PAN[k]);
+      p.voicing = null;
       return p;
     },
 
@@ -753,19 +871,22 @@
       const stage = p.stage;
       const out = p.outMain;
 
-      // Pad
+      // Pad（聲部連接：選最接近上一個和弦的轉位，和聲進行更平順）
+      if (s16 === 0) p.voicing = voiceLead(chordMidis(song, deg, 0), p.voicing, song.root + 5);
       if (song.padSeq) {
-        if (song.padSeq[s16] === 'x') this.pad(t, chordMidis(song, deg, 0), p.stepDur * 2, song.pad, out, 1);
+        if (song.padSeq[s16] === 'x') this.pad(t, p.voicing, p.stepDur * 2, song.pad, p.outWide, 1);
       } else if (s16 === 0) {
-        this.pad(t, chordMidis(song, deg, 0), p.stepDur * 16, song.pad, out, 1);
+        this.pad(t, p.voicing, p.stepDur * 16, song.pad, p.outWide, 1);
       }
       const climax = stage >= 5;
       const hot = climax || this.boost >= 2;
       // Arp（高潮 / Combo 時加一層高八度）
       const ai = song.arpSeq[s16];
       if (ai >= 0) {
-        this.pluck(t, extTone(song, deg, ai, song.arpOct), song.arp, out, stage === 0 ? 0.8 : 1);
-        if (hot) this.pluck(t + p.stepDur * 0.5, extTone(song, deg, ai + 2, song.arpOct + 1), song.arp, out, 0.4);
+        const hv = 0.86 + Math.random() * 0.24 + (s16 % 4 === 0 ? 0.08 : 0); // 力度微幅變化，像真人彈奏
+        const side = (s16 >> 1) % 2 ? p.outR : p.outL;
+        this.pluck(t + Math.random() * 0.006, extTone(song, deg, ai, song.arpOct), song.arp, side, (stage === 0 ? 0.8 : 1) * hv);
+        if (hot) this.pluck(t + p.stepDur * 0.5, extTone(song, deg, ai + 2, song.arpOct + 1), song.arp, side === p.outL ? p.outR : p.outL, 0.4);
       }
       // Bass
       if (stage >= 1) {
@@ -782,8 +903,9 @@
         if (stage < DRUM_STAGE[kind]) continue;
         const ch = song.drums[kind][s16];
         if (!ch || ch === '.') continue;
-        const v = ch === 'X' ? 1.25 : ch === 'o' ? 0.5 : 1;
-        this.drum(kind, t, v, p.outDrum);
+        let v = ch === 'X' ? 1.25 : ch === 'o' ? 0.5 : 1;
+        if (kind === 'hat' || kind === 'shaker') v *= s16 % 4 === 0 ? 1 : s16 % 2 === 0 ? 0.78 : 0.6 + Math.random() * 0.15; // 律動的輕重
+        this.drum(kind, t, v, p.drumPan[kind] || p.outDrum);
         if (kind === 'kick' && song.pump) {
           for (const g of [p.duck.gain, p.duckWet.gain]) {
             g.cancelScheduledValues(t);
@@ -792,13 +914,18 @@
           }
         }
       }
+      // 每 8 小節結尾加一段過門，讓樂句有呼吸
+      if (stage >= 2 && !this.build && bar % 8 === 7 && s16 >= 12) {
+        const kind = song.drums.janggu ? 'jangguHi' : song.drums.tanggu ? 'tanggu' : song.drums.buk ? 'buk' : stage >= 3 ? 'snare' : 'rim';
+        if (s16 === 12 || s16 === 14 || (stage >= 3 && s16 >= 13)) this.drum(kind, t, 0.45 + (s16 - 12) * 0.12, p.drumPan[kind] || p.outDrum);
+      }
       if (song.rain && s16 === 0) this.noise({ t, ftype: 'bandpass', freq: 2600, q: 0.4, a: 0.6, d: p.stepDur * 17, peak: 0.045, out: p.outDrum, wet: 0.2 });
       if (song.gong && stage >= 3 && s16 === 0 && bar % 4 === 0) this.drum('gong', t, 1, p.outDrum);
       // 史詩層：第 3 階起弦樂團 + 定音鼓 / 大太鼓，第 4 階起銅管重音
       const eastern = song.epic === 'eastern';
       const tri = chordMidis(song, deg, 0, 3);
       if (stage >= 3 && s16 === 0) {
-        this.strings(t, tri.map((m) => m + 12).concat([tri[0]]), p.stepDur * 16, [0, 0, 0, 0.6, 0.85, 1.1][stage], out);
+        this.strings(t, tri.map((m) => m + 12).concat([tri[0]]), p.stepDur * 16, [0, 0, 0, 0.6, 0.85, 1.1][stage], p.outWide);
       }
       if (stage >= 3) {
         const hit = eastern
@@ -827,15 +954,21 @@
         if (s16 % 4 === 0 && !song.drums.kick) this.drum('kick', t, 0.55, p.outDrum);
         if (s16 === 12 && bar % 2 === 1) this.drum('snare', t + p.stepDur * 2, 0.5, p.outDrum);
       }
-      // Lead
-      if (stage >= 4) {
+      // Lead：第 1 階起旋律就會隔段輕輕出現（8 小節唱、8 小節休息），第 4 階起完整演奏；
+      // 每 16 小節的後半段旋律往上移三度做變奏，不會一直重複同一句
+      const section = Math.floor(step / 128);
+      const leadOn = stage >= 4 || (stage >= 1 && section % 2 === 0);
+      if (leadOn) {
         const motif = song.leadSeq[Math.floor(step / 32) % song.leadSeq.length];
         const s32 = step % 32;
-        for (const [st, d, len] of motif) {
-          if (st === s32) {
-            this.leadNote(t, degToMidi(song, d, song.leadOct), p.stepDur * len * 0.92, song.lead, out);
-            if (climax) this.leadNote(t, degToMidi(song, d, song.leadOct + 1), p.stepDur * len * 0.92, song.lead, out, 0.45);
-          }
+        const shift = section % 4 === 3 && song.leadSeq.length > 1 && Math.floor(step / 32) % 2 === 0 ? 2 : 0;
+        const lv = stage >= 4 ? 1 : 0.42 + stage * 0.08;
+        for (let i = 0; i < motif.length; i++) {
+          const [st, d, len] = motif[i];
+          if (st !== s32) continue;
+          const dd = i === motif.length - 1 ? d : d + shift; // 句尾回到原本的音，收得住
+          this.leadNote(t, degToMidi(song, dd, song.leadOct), p.stepDur * len * 0.92, song.lead, out, lv * (0.92 + Math.random() * 0.12));
+          if (climax) this.leadNote(t, degToMidi(song, dd, song.leadOct + 1), p.stepDur * len * 0.92, song.lead, out, 0.45);
         }
       }
     },

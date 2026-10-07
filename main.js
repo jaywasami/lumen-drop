@@ -7,6 +7,9 @@
   const { Input, ACTIONS, DEFAULT_KEYS, ACTION_LABEL } = window.LumenInput;
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
+  // 版本號：日期 + 當天第幾版（每次發佈更新）
+  const VERSION = '2026.10.07-1';
+
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   const DEFAULTS = {
@@ -103,6 +106,7 @@
     { name: '深海', accent: [77, 232, 255], style: 'glass', sub: '沉入光照不到的地方' },
     { name: '竹林', accent: [150, 225, 140], style: 'porcelain', sub: '風過竹林，一葉知秋', light: true },
     { name: '極光', accent: [109, 255, 176], style: 'glass', sub: '夜空在呼吸' },
+    { name: '景福宮', accent: [120, 210, 190], style: 'jade', sub: '宮燈照亮千年的屋簷' },
     { name: '水墨', accent: [214, 72, 58], style: 'porcelain', sub: '山色有無中', light: true },
     { name: '荷塘月色', accent: [255, 170, 205], style: 'jade', sub: '荷塘月色，曲曲折折' },
     { name: '螢火森林', accent: [200, 255, 120], style: 'glass', sub: '森林在夜裡發光' },
@@ -110,8 +114,10 @@
     { name: '土星環', accent: [255, 200, 140], style: 'gem', sub: '在星環的陰影裡漂流' },
     { name: '敦煌', accent: [240, 180, 90], style: 'gold', sub: '飛天的彩帶穿過千年' },
     { name: '櫻花', accent: [255, 166, 216], style: 'soft', sub: '花落知多少' },
+    { name: '韓屋月夜', accent: [255, 196, 110], style: 'gold', sub: '月圓的夜晚，屋瓦上落滿銀杏' },
     { name: '長城', accent: [255, 190, 130], style: 'gold', sub: '萬里長城今猶在' },
     { name: '冰晶洞窟', accent: [150, 230, 255], style: 'glass', sub: '光在冰裡迷了路' },
+    { name: '首爾夜光', accent: [255, 110, 210], style: 'neon', sub: '漢江上的彩虹在夜裡跳舞' },
     { name: '楓紅', accent: [255, 120, 60], style: 'porcelain', sub: '停車坐愛楓林晚', light: true },
     { name: '燈節', accent: [255, 170, 60], style: 'gold', sub: '東風夜放花千樹' },
     { name: '雨夜', accent: [120, 180, 255], style: 'neon', sub: '霓虹在雨裡暈開' },
@@ -1947,6 +1953,7 @@
   Snd.musicVol = settings.music;
   Snd.sfxVol = settings.sfx;
   $('best-score').textContent = getBest().toLocaleString();
+  $('ver').textContent = `版本 ${VERSION}`;
   setupPost();
   layout();
   setTheme(0, true);

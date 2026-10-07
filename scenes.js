@@ -2817,10 +2817,507 @@
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.3 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
   }
 
+  // =========================================================
+  // 韓風共用
+  // =========================================================
+  // 青紗燈籠（청사초롱）：上紅下藍的絲燈，金色框架
+  function chorongSprite() {
+    const S = layer(64, 104);
+    const g = S.g;
+    g.scale(2, 2);
+    const cx = 16, top = 8, bot = 44, rw = 12;
+    g.strokeStyle = '#c99a45'; g.lineWidth = 0.9;
+    g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, top); g.stroke();
+    const body = (y0, y1, c0, c1) => {
+      const gr = g.createLinearGradient(cx - rw, 0, cx + rw, 0);
+      gr.addColorStop(0, c1); gr.addColorStop(0.35, c0); gr.addColorStop(0.65, c0); gr.addColorStop(1, c1);
+      g.fillStyle = gr;
+      g.beginPath(); g.moveTo(cx - rw, y0); g.lineTo(cx + rw, y0); g.quadraticCurveTo(cx + rw + 2, (y0 + y1) / 2, cx + rw, y1); g.lineTo(cx - rw, y1); g.quadraticCurveTo(cx - rw - 2, (y0 + y1) / 2, cx - rw, y0); g.fill();
+    };
+    body(top + 2, top + 22, '#ff5a4a', '#8e1420');
+    body(top + 22, bot - 2, '#4a7dff', '#142a7a');
+    // 內部燭光
+    const fl = g.createRadialGradient(cx, top + 21, 0, cx, top + 21, 15);
+    fl.addColorStop(0, 'rgba(255,240,200,0.85)'); fl.addColorStop(0.5, 'rgba(255,200,120,0.25)'); fl.addColorStop(1, 'rgba(255,200,120,0)');
+    g.fillStyle = fl; g.fillRect(cx - rw, top + 2, rw * 2, bot - top - 4);
+    // 金框
+    g.fillStyle = '#d9ad55';
+    g.fillRect(cx - rw - 1.5, top, rw * 2 + 3, 2.4); g.fillRect(cx - rw - 1.5, bot - 2.4, rw * 2 + 3, 2.4);
+    g.strokeStyle = 'rgba(217,173,85,0.8)'; g.lineWidth = 0.7;
+    for (const x of [cx - rw * 0.55, cx, cx + rw * 0.55]) { g.beginPath(); g.moveTo(x, top + 2); g.lineTo(x, bot - 2); g.stroke(); }
+    // 流蘇
+    g.strokeStyle = '#ff6a55'; g.lineWidth = 0.8;
+    for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(cx + k * 0.8, bot); g.lineTo(cx + k * 1.4, bot + 7); g.stroke(); }
+    return S;
+  }
+  // 蓮花燈（연등）：粉嫩花瓣層層包住燭光
+  function lotusLampSprite(c1, c2) {
+    const S = layer(56, 56);
+    const g = S.g;
+    const cx = 28, cy = 32;
+    const glowG = g.createRadialGradient(cx, cy - 4, 0, cx, cy - 4, 26);
+    glowG.addColorStop(0, 'rgba(255,240,200,0.6)'); glowG.addColorStop(1, 'rgba(255,200,150,0)');
+    g.fillStyle = glowG; g.fillRect(0, 0, 56, 56);
+    const petal = (ang, len, wd, col) => {
+      g.save(); g.translate(cx, cy); g.rotate(ang);
+      const gr = g.createLinearGradient(0, 0, 0, -len);
+      gr.addColorStop(0, c2); gr.addColorStop(0.7, col); gr.addColorStop(1, '#fff4f6');
+      g.fillStyle = gr;
+      g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(wd, -len * 0.55, 0, -len); g.quadraticCurveTo(-wd, -len * 0.55, 0, 0); g.fill();
+      g.restore();
+    };
+    for (const a of [-1.25, 1.25, -0.85, 0.85]) petal(a, 17, 7, c1);
+    for (const a of [-0.45, 0.45, 0]) petal(a, 20, 7.5, c1);
+    g.fillStyle = '#3c8a4a';
+    g.beginPath(); g.ellipse(cx, cy + 3, 14, 4, 0, 0, TAU); g.fill();
+    return S;
+  }
+  // 韓式屋頂：中間平、兩端優雅上翹（처마）
+  function hanokRoof(g, cx, y, w, hgt, col, lift) {
+    const l = lift == null ? 0.55 : lift;
+    g.fillStyle = col;
+    g.beginPath();
+    g.moveTo(cx - w * 0.5, y - hgt * l);
+    g.quadraticCurveTo(cx - w * 0.36, y + hgt * 0.05, cx - w * 0.12, y);
+    g.lineTo(cx + w * 0.12, y);
+    g.quadraticCurveTo(cx + w * 0.36, y + hgt * 0.05, cx + w * 0.5, y - hgt * l);
+    g.quadraticCurveTo(cx + w * 0.34, y - hgt * 0.35, cx + w * 0.22, y - hgt);
+    g.lineTo(cx - w * 0.22, y - hgt);
+    g.quadraticCurveTo(cx - w * 0.34, y - hgt * 0.35, cx - w * 0.5, y - hgt * l);
+    g.fill();
+  }
+
+  // =========================================================
+  // 景福宮：月下宮殿、丹青屋簷、青紗燈籠、緩緩升起的蓮花燈
+  // =========================================================
+  class Gyeongbokgung {
+    constructor(low) { this.low = low; this.lamps = []; this.glowK = 0; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#050a24'], [0.4, '#121a48'], [0.68, '#2c2560'], [0.8, '#5a2f5c'], [0.9, '#2a1830'], [1, '#0b0710']]);
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(230,235,255,${rand(0.1, 0.6)})`; const r = rand(0.4, 1.3); g.beginPath(); g.arc(rand(0, w), rand(0, h * 0.6), r, 0, TAU); g.fill(); }
+      // 滿月
+      const mx = (this.mx = w * 0.5), my = (this.my = h * 0.032), mr = 21 * sc;
+      glow(g, mx, my, mr * 5, '200,210,255', 0.18);
+      const mg = g.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, 0, mx, my, mr);
+      mg.addColorStop(0, '#fffef4'); mg.addColorStop(0.7, '#f1ecd6'); mg.addColorStop(1, '#d8d2bd');
+      g.fillStyle = mg; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(170,160,140,0.25)';
+      for (const [dx, dy, r] of [[-0.3, -0.1, 0.22], [0.25, 0.2, 0.16], [0.05, -0.35, 0.12], [0.35, -0.2, 0.09]]) { g.beginPath(); g.arc(mx + dx * mr, my + dy * mr, r * mr, 0, TAU); g.fill(); }
+      // 北岳山
+      g.fillStyle = '#141a3a';
+      g.beginPath(); g.moveTo(0, h * 0.66);
+      for (let x = 0; x <= w; x += 6) g.lineTo(x, h * 0.66 - Math.sin(x / w * Math.PI) * h * 0.06 - Math.sin(x / 37) * 4 * sc - Math.sin(x / 13) * 2 * sc);
+      g.lineTo(w, h); g.lineTo(0, h); g.fill();
+      glow(g, w * 0.5, h * 0.8, w * 0.75, '255,150,80', 0.3);
+      // 勤政殿：兩層屋頂、丹青、紅柱、石台
+      const cx = w * 0.5, base = h * 0.87;
+      const bw = Math.min(w * 0.82, 360 * sc);
+      // 石台（月台）
+      g.fillStyle = '#6e6a72'; g.fillRect(cx - bw * 0.56, base, bw * 1.12, h * 0.02);
+      g.fillStyle = '#8c8790'; g.fillRect(cx - bw * 0.5, base - h * 0.012, bw, h * 0.014);
+      g.fillStyle = 'rgba(255,220,170,0.35)'; g.fillRect(cx - bw * 0.56, base, bw * 1.12, 1.5);
+      const floor = (y, ww, hh, tier) => {
+        // 柱間透出暖光
+        const colTop = y - hh * 0.62;
+        g.fillStyle = '#2a0b0e'; g.fillRect(cx - ww * 0.4, colTop, ww * 0.8, hh * 0.62);
+        const n = 7;
+        for (let i = 0; i < n; i++) {
+          const x0 = cx - ww * 0.4 + (i + 0.12) * ww * 0.8 / n, x1w = ww * 0.8 / n * 0.76;
+          const lg = g.createLinearGradient(0, colTop, 0, y);
+          lg.addColorStop(0, `rgba(255,${(175 + Math.random() * 40) | 0},100,0.85)`); lg.addColorStop(1, 'rgba(255,120,50,0.6)');
+          g.fillStyle = lg; g.fillRect(x0, colTop + hh * 0.08, x1w, hh * 0.54);
+          g.strokeStyle = 'rgba(120,50,30,0.6)'; g.lineWidth = 0.6;
+          for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(x0, colTop + hh * 0.08 + k * hh * 0.135); g.lineTo(x0 + x1w, colTop + hh * 0.08 + k * hh * 0.135); g.stroke(); }
+        }
+        g.fillStyle = '#a3252a';
+        for (let i = 0; i <= n; i++) g.fillRect(cx - ww * 0.4 + i * ww * 0.8 / n - 1.6 * sc, colTop, 3.2 * sc, hh * 0.62);
+        // 丹青：綠藍紅的彩繪帶
+        const dy = colTop - hh * 0.16;
+        const band = [['#2f8a6d', 0.06], ['#1f4f9a', 0.05], ['#2f8a6d', 0.05]];
+        let yy = dy;
+        for (const [c, k] of band) { g.fillStyle = c; g.fillRect(cx - ww * 0.44, yy, ww * 0.88, hh * k); yy += hh * k; }
+        for (let x = cx - ww * 0.43; x < cx + ww * 0.43; x += 7 * sc) {
+          g.fillStyle = '#e45a4c'; g.beginPath(); g.arc(x, dy + hh * 0.08, 1.6 * sc, 0, TAU); g.fill();
+          g.fillStyle = '#f2d36b'; g.beginPath(); g.arc(x + 3.5 * sc, dy + hh * 0.08, 1 * sc, 0, TAU); g.fill();
+        }
+        // 屋頂
+        const rg = g.createLinearGradient(0, dy - hh * 0.72, 0, dy);
+        rg.addColorStop(0, '#3a3a52'); rg.addColorStop(1, '#14121c');
+        hanokRoof(g, cx, dy, ww * 1.12, hh * (tier ? 0.62 : 0.72), rg, 0.7);
+        g.fillStyle = 'rgba(200,210,255,0.25)'; g.fillRect(cx - ww * 0.25, dy - hh * (tier ? 0.62 : 0.72), ww * 0.5, 1.5); // 屋脊月光
+        g.strokeStyle = 'rgba(160,170,210,0.35)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx - ww * 0.56, dy - hh * (tier ? 0.62 : 0.72) * 0.7); g.quadraticCurveTo(cx - ww * 0.4, dy + 1, cx - ww * 0.12, dy); g.lineTo(cx + ww * 0.12, dy); g.quadraticCurveTo(cx + ww * 0.4, dy + 1, cx + ww * 0.56, dy - hh * (tier ? 0.62 : 0.72) * 0.7); g.stroke();
+        return dy - hh * (tier ? 0.62 : 0.72);
+      };
+      const hh = h * 0.07;
+      const y1 = floor(base - h * 0.012, bw * 0.78, hh, 0);
+      floor(y1 + hh * 0.18, bw * 0.55, hh * 0.85, 1);
+      // 兩側迴廊
+      for (const sx of [-1, 1]) {
+        const x0 = cx + sx * bw * 0.62, ww = w * 0.5;
+        g.fillStyle = '#120d16'; g.fillRect(Math.min(x0, x0 + sx * ww), base - h * 0.028, ww, h * 0.05);
+        for (let x = 0; x < ww; x += 11 * sc) { g.fillStyle = 'rgba(255,170,90,0.55)'; g.fillRect(x0 + sx * x - 3 * sc, base - h * 0.022, 6 * sc, h * 0.016); }
+        g.fillStyle = '#16141d';
+        g.fillRect(Math.min(x0, x0 + sx * ww), base - h * 0.04, ww, h * 0.014);
+      }
+      g.fillStyle = '#07050a'; g.fillRect(0, base + h * 0.02, w, h);
+      this.chorong = chorongSprite();
+      this.lampImgs = [lotusLampSprite('#ff9cc0', '#e04d82'), lotusLampSprite('#ffd27a', '#e08a2a'), lotusLampSprite('#a8e8b8', '#3aa070')];
+      this.lamps = [];
+      for (let i = 0; i < (this.low ? 8 : 18); i++) this.lamps.push(this.newLamp(true));
+    }
+    newLamp(anywhere, x) {
+      return { x: x != null ? x : rand(0, this.w), y: anywhere ? rand(0.1, 1) * this.h : this.h + rand(10, 60), vy: rand(10, 22), z: rand(0.45, 1), ph: rand(0, TAU), k: (Math.random() * 3) | 0 };
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.glowK *= Math.pow(0.2, s);
+      for (const l of this.lamps) { l.y -= l.vy * l.z * s * (1 + this.glowK); l.ph += s * 0.9; }
+      this.lamps = this.lamps.filter((l) => l.y > -50);
+      while (this.lamps.length < (this.low ? 8 : 18)) this.lamps.push(this.newLamp(false));
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h, sc = this.sc;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      // 月光雲
+      g.globalCompositeOperation = 'lighter';
+      glow(g, this.mx, this.my, 60 * sc, '220,225,255', 0.12 + beat * 0.06);
+      for (const l of this.lamps) {
+        const s = 22 * l.z * sc, sx = l.x + Math.sin(l.ph) * 8 * sc;
+        glow(g, sx, l.y, s * 2.2, '255,170,120', (0.18 + this.glowK * 0.2) * l.z);
+        g.globalAlpha = 0.5 + 0.5 * l.z;
+        g.drawImage(this.lampImgs[l.k].cv, sx - s, l.y - s, s * 2, s * 2);
+        g.globalAlpha = 1;
+      }
+      g.globalCompositeOperation = 'source-over';
+      // 頂部一串青紗燈籠
+      const y0 = h * 0.012, sag = h * 0.028, n = 8, ls = 0.9 * sc;
+      const yAt = (x) => { const k = x / w; return y0 + sag * 4 * k * (1 - k); };
+      g.strokeStyle = 'rgba(10,8,20,0.95)'; g.lineWidth = 1.4;
+      g.beginPath(); for (let x = 0; x <= w; x += 8) (x ? g.lineTo(x, yAt(x)) : g.moveTo(x, yAt(x))); g.stroke();
+      for (let i = 0; i < n; i++) {
+        const x = (i + 0.5) / n * w, y = yAt(x);
+        if (x > B.x - 16 * ls && x < B.x + B.w + 16 * ls) continue;
+        const sway = Math.sin(t / 1300 + i * 1.7) * 0.07 + beat * 0.04 * (i % 2 ? 1 : -1);
+        g.save(); g.translate(x, y); g.rotate(sway); g.scale(ls, ls);
+        g.globalCompositeOperation = 'lighter';
+        glow(g, 0, 28, 48, '255,140,90', 0.3 + beat * 0.2 + this.glowK * 0.3);
+        glow(g, 0, 36, 30, '120,150,255', 0.18);
+        g.globalCompositeOperation = 'source-over';
+        g.drawImage(this.chorong.cv, -16, 0, 32, 52);
+        g.restore();
+      }
+    }
+    burst(d, B) {
+      this.glowK = Math.min(1.5, this.glowK + 0.3 * d.lines);
+      const n = Math.min(this.low ? 4 : 10, d.lines * 2 + (d.lines >= 4 ? 4 : 0));
+      for (let i = 0; i < n; i++) { const l = this.newLamp(false, rand(0.05, 0.95) * this.w); l.y = this.h * rand(0.85, 1); l.vy = rand(30, 50); this.lamps.push(l); }
+    }
+  }
+
+  // =========================================================
+  // 韓屋月夜：中秋大月亮、雲影掠過、北村韓屋屋瓦、柿子樹、銀杏葉與芒草
+  // =========================================================
+  function ginkgoSprite() {
+    const S = layer(32, 32);
+    const g = S.g;
+    const gr = g.createRadialGradient(16, 22, 2, 16, 14, 16);
+    gr.addColorStop(0, '#fff2a0'); gr.addColorStop(0.6, '#f6c93a'); gr.addColorStop(1, '#d8941a');
+    g.fillStyle = gr;
+    g.beginPath(); g.moveTo(16, 26); g.lineTo(3, 9); g.quadraticCurveTo(16, 0, 29, 9); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(160,100,20,0.45)'; g.lineWidth = 0.6;
+    for (let k = -3; k <= 3; k++) { g.beginPath(); g.moveTo(16, 26); g.lineTo(16 + k * 3.6, 6); g.stroke(); }
+    g.strokeStyle = '#b8801c'; g.lineWidth = 1; g.beginPath(); g.moveTo(16, 26); g.lineTo(16, 31); g.stroke();
+    return S;
+  }
+  class HanokMoon {
+    constructor(low) { this.low = low; this.wind = 0; this.extra = []; this.moonK = 0; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#071528'], [0.45, '#0f2c44'], [0.75, '#1d4a5c'], [1, '#0a1820']]);
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(230,240,255,${rand(0.08, 0.4)})`; g.fillRect(rand(0, w), rand(0, h * 0.55), 1, 1); }
+      // 大月亮放在上方：場地外最醒目的位置
+      const mx = (this.mx = w * 0.5), my = (this.my = h * 0.02), mr = (this.mr = Math.min(w * 0.36, 150 * sc));
+      glow(g, mx, my, mr * 2.6, '255,220,150', 0.3);
+      const mg = g.createRadialGradient(mx - mr * 0.25, my - mr * 0.25, 0, mx, my, mr);
+      mg.addColorStop(0, '#fffbe6'); mg.addColorStop(0.6, '#ffe7a8'); mg.addColorStop(1, '#f2c26a');
+      g.fillStyle = mg; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(200,150,70,0.22)';
+      for (const [dx, dy, r] of [[-0.35, 0.3, 0.2], [0.3, 0.45, 0.15], [0.05, 0.6, 0.1], [-0.1, 0.15, 0.08], [0.45, 0.15, 0.09]]) { g.beginPath(); g.arc(mx + dx * mr, my + dy * mr, r * mr, 0, TAU); g.fill(); }
+      // 月兔搗年糕（淡淡的剪影）
+      g.fillStyle = 'rgba(190,140,60,0.28)';
+      const rx = mx - mr * 0.42, ry = my + mr * 0.62, rs = mr * 0.16;
+      g.beginPath(); g.ellipse(rx, ry, rs, rs * 0.75, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(rx + rs * 0.7, ry - rs * 0.7, rs * 0.45, rs * 0.4, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(rx + rs * 0.6, ry - rs * 1.4, rs * 0.12, rs * 0.45, -0.3, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(rx + rs * 0.9, ry - rs * 1.35, rs * 0.12, rs * 0.45, 0.2, 0, TAU); g.fill();
+      g.fillRect(rx + rs * 1.6, ry - rs * 0.2, rs * 0.7, rs * 0.9);
+      // 北村：三層韓屋屋瓦往下堆疊
+      const rows = [[0.7, '#16323f', 0.85], [0.79, '#0f2430', 1], [0.88, '#08151d', 1.25]];
+      for (const [ky, col, z] of rows) {
+        const y = h * ky;
+        let x = -rand(0, 40) * sc;
+        while (x < w + 40) {
+          const rw = rand(70, 120) * sc * z, rh = rand(16, 22) * sc * z;
+          // 牆與窗紙透光
+          g.fillStyle = col; g.fillRect(x + rw * 0.14, y - rh * 0.1, rw * 0.72, h - y);
+          if (Math.random() < 0.65) {
+            const wx = x + rw * rand(0.25, 0.55), ww = rw * 0.18, wy = y + rh * 0.35, wh = rh * 0.9;
+            const lg = g.createLinearGradient(0, wy, 0, wy + wh);
+            lg.addColorStop(0, 'rgba(255,214,140,0.9)'); lg.addColorStop(1, 'rgba(255,170,90,0.75)');
+            g.fillStyle = lg; g.fillRect(wx, wy, ww, wh);
+            g.strokeStyle = 'rgba(70,40,20,0.7)'; g.lineWidth = 0.7;
+            for (let k = 1; k < 3; k++) { g.beginPath(); g.moveTo(wx + ww * k / 3, wy); g.lineTo(wx + ww * k / 3, wy + wh); g.stroke(); }
+            for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(wx, wy + wh * k / 4); g.lineTo(wx + ww, wy + wh * k / 4); g.stroke(); }
+            glow(g, wx + ww / 2, wy + wh / 2, ww * 2.2, '255,180,90', 0.18);
+          }
+          hanokRoof(g, x + rw / 2, y, rw, rh, col, 0.55);
+          // 瓦片縱紋
+          g.strokeStyle = 'rgba(160,200,220,0.12)'; g.lineWidth = 1;
+          for (let tx = x + rw * 0.2; tx < x + rw * 0.8; tx += 4 * sc) { g.beginPath(); g.moveTo(tx, y - rh * 0.95); g.lineTo(tx + (tx - x - rw / 2) * 0.12, y - 1); g.stroke(); }
+          g.strokeStyle = 'rgba(255,230,170,0.22)'; g.beginPath(); g.moveTo(x + rw * 0.28, y - rh); g.lineTo(x + rw * 0.72, y - rh); g.stroke();
+          x += rw * rand(0.85, 1.05);
+        }
+      }
+      // 柿子樹：右上角伸出的枝幹與橘色柿子
+      const persimmon = (x, y, r) => {
+        const pg = g.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
+        pg.addColorStop(0, '#ffd27a'); pg.addColorStop(0.5, '#ff8a2a'); pg.addColorStop(1, '#c84b10');
+        g.fillStyle = pg; g.beginPath(); g.ellipse(x, y, r, r * 0.88, 0, 0, TAU); g.fill();
+        g.fillStyle = '#3e5a2a';
+        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.4; g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.25, y - r * 0.8 + Math.sin(a) * r * 0.15, r * 0.28, r * 0.12, a, 0, TAU); g.fill(); }
+      };
+      const branch = (x0, y0, ang, len, wd, d) => {
+        const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len;
+        g.strokeStyle = '#1a1210'; g.lineWidth = wd; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2 + rand(-6, 6) * sc, (y0 + y1) / 2 + rand(-6, 6) * sc, x1, y1); g.stroke();
+        if (d <= 0) { if (Math.random() < 0.85) persimmon(x1, y1 + 6 * sc, rand(6, 8.5) * sc); return; }
+        branch(x1, y1, ang + rand(0.2, 0.55), len * 0.72, wd * 0.62, d - 1);
+        branch(x1, y1, ang - rand(0.2, 0.55), len * 0.72, wd * 0.62, d - 1);
+      };
+      branch(w + 6, h * 0.035, Math.PI - 0.35, 30 * sc, 7 * sc, 3);
+      branch(-6, h * 0.05, 0.3, 26 * sc, 6 * sc, 3);
+      this.leafImg = ginkgoSprite();
+      this.leaves = [];
+      for (let i = 0; i < (this.low ? 10 : 22); i++) this.leaves.push(this.newLeaf(true));
+      this.clouds = [];
+      for (let i = 0; i < 4; i++) this.clouds.push({ x: rand(-0.3, 1) * w, y: my + rand(0.3, 1.1) * mr, wd: rand(110, 200) * sc, v: rand(6, 12) * sc, a: rand(0.25, 0.45) });
+      this.grass = [];
+      for (let i = 0; i < (this.low ? 8 : 16); i++) { const side = i % 2; this.grass.push({ x: side ? w - rand(0, 0.2) * w : rand(0, 0.2) * w, len: rand(90, 150) * sc, ph: rand(0, TAU), lean: side ? -1 : 1 }); }
+    }
+    newLeaf(anywhere, x, y) {
+      return { x: x != null ? x : rand(-0.1, 1.1) * this.w, y: y != null ? y : anywhere ? rand(0, this.h) : rand(-30, -10), vx: rand(-8, 12), vy: rand(22, 40), rot: rand(0, TAU), vr: rand(-1.5, 1.5), flip: rand(0, TAU), vf: rand(1.5, 3.5), s: rand(7, 11) * this.sc };
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.wind *= Math.pow(0.3, s);
+      this.moonK *= Math.pow(0.25, s);
+      const upd = (p) => { p.x += (p.vx + this.wind) * s; p.y += p.vy * s; p.rot += p.vr * s; p.flip += p.vf * s; };
+      for (const p of this.leaves) { upd(p); if (p.y > this.h + 20 || p.x > this.w + 30) Object.assign(p, this.newLeaf(false)); }
+      for (const p of this.extra) { upd(p); p.vy += 30 * s; }
+      this.extra = this.extra.filter((p) => p.y < this.h + 20 && p.x < this.w + 40);
+      for (const c of this.clouds) { c.x += c.v * s; if (c.x - c.wd > this.w) c.x = -c.wd; }
+      for (const gg of this.grass) gg.ph += s * (1 + this.wind / 120);
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h, sc = this.sc;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      glow(g, this.mx, this.my, this.mr * 1.7, '255,220,150', 0.08 + beat * 0.05 + this.moonK * 0.25);
+      g.globalCompositeOperation = 'source-over';
+      // 雲影掠過月亮
+      for (const c of this.clouds) {
+        g.fillStyle = `rgba(30,50,70,${c.a})`;
+        g.beginPath(); g.ellipse(c.x, c.y, c.wd * 0.5, c.wd * 0.07, 0, 0, TAU); g.fill();
+        g.beginPath(); g.ellipse(c.x + c.wd * 0.15, c.y - c.wd * 0.05, c.wd * 0.28, c.wd * 0.06, 0, 0, TAU); g.fill();
+        g.fillStyle = `rgba(255,220,160,${c.a * 0.25})`;
+        g.fillRect(c.x - c.wd * 0.3, c.y - c.wd * 0.075, c.wd * 0.6, 1);
+      }
+      // 芒草隨風搖
+      g.lineCap = 'round';
+      for (const gg of this.grass) {
+        const sway = Math.sin(gg.ph) * 0.12 + this.wind * 0.0015 + gg.lean * 0.12;
+        const tipX = gg.x + Math.sin(sway) * gg.len, tipY = h - Math.cos(sway) * gg.len;
+        g.strokeStyle = 'rgba(12,22,26,0.95)'; g.lineWidth = 1.8 * sc;
+        g.beginPath(); g.moveTo(gg.x, h); g.quadraticCurveTo(gg.x, h - gg.len * 0.5, tipX, tipY); g.stroke();
+        // 蓬鬆的芒草穗：被月光照亮的柔軟羽狀
+        g.save(); g.translate(tipX, tipY); g.rotate(sway + gg.lean * 0.5);
+        const pg = g.createLinearGradient(0, 0, 0, -26 * sc);
+        pg.addColorStop(0, 'rgba(220,200,160,0.15)'); pg.addColorStop(1, 'rgba(255,240,205,0.6)');
+        g.fillStyle = pg;
+        g.beginPath(); g.ellipse(0, -13 * sc, 4.5 * sc, 14 * sc, 0, 0, TAU); g.fill();
+        g.restore();
+      }
+      const drawL = (p) => {
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(1, Math.cos(p.flip));
+        g.drawImage(this.leafImg.cv, -p.s, -p.s, p.s * 2, p.s * 2); g.restore();
+      };
+      for (const p of this.leaves) drawL(p);
+      for (const p of this.extra) drawL(p);
+    }
+    burst(d, B) {
+      this.wind = Math.min(400, this.wind + 60 * d.lines + (d.lines >= 4 ? 120 : 0));
+      this.moonK = Math.min(1.2, this.moonK + 0.25 * d.lines);
+      const n = Math.min(this.low ? 10 : 26, d.lines * (this.low ? 3 : 7));
+      for (let i = 0; i < n; i++) {
+        const row = d.rows && d.rows.length ? d.rows[i % d.rows.length].vy : 18;
+        const p = this.newLeaf(false, B.x + rand(0, B.w), B.y + (row + 0.5) * B.c);
+        p.vx = rand(50, 200) * (Math.random() < 0.5 ? -1 : 1); p.vy = rand(-90, 0);
+        this.extra.push(p);
+      }
+    }
+  }
+
+  // =========================================================
+  // 首爾夜光：南山塔、城市天際線與霓虹招牌、漢江倒影、盤浦大橋月光彩虹噴泉
+  // =========================================================
+  class SeoulNight {
+    constructor(low) { this.low = low; this.drops = []; this.surge = 0; this.fw = []; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#0a0620'], [0.4, '#1b0f3e'], [0.62, '#3e1a5c'], [0.7, '#7a2a6e'], [0.74, '#2a1238'], [1, '#05030c']]);
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(255,235,255,${rand(0.08, 0.4)})`; g.fillRect(rand(0, w), rand(0, h * 0.45), 1, 1); }
+      // 南山與 N 首爾塔（左上，避開場地）
+      const tx = (this.tx = w * 0.13);
+      g.fillStyle = '#140c26';
+      g.beginPath(); g.moveTo(-20, h * 0.66); g.quadraticCurveTo(tx, h * 0.53, w * 0.42, h * 0.66); g.fill();
+      const tb = h * 0.565, tt = (this.tt = h * 0.39);
+      g.fillStyle = '#d8d4e8';
+      g.beginPath(); g.moveTo(tx - 4 * sc, tb); g.lineTo(tx - 2 * sc, tt + h * 0.05); g.lineTo(tx + 2 * sc, tt + h * 0.05); g.lineTo(tx + 4 * sc, tb); g.fill();
+      g.fillStyle = '#ece8f8'; g.beginPath(); g.ellipse(tx, tt + h * 0.05, 10 * sc, 5 * sc, 0, 0, TAU); g.fill();
+      g.fillRect(tx - 7 * sc, tt + h * 0.035, 14 * sc, h * 0.015);
+      g.fillStyle = '#cfcbe0'; g.fillRect(tx - 1 * sc, tt, 2 * sc, h * 0.035);
+      // 天際線：兩層大樓、點點窗燈
+      const skyline = (base, hmin, hmax, col, winA) => {
+        let x = 0;
+        while (x < w) {
+          const bw = rand(16, 34) * sc, bh = rand(hmin, hmax) * h;
+          g.fillStyle = col; g.fillRect(x, base - bh, bw - 1, bh);
+          for (let wy = base - bh + 4 * sc; wy < base - 3 * sc; wy += 5 * sc) for (let wx = x + 3 * sc; wx < x + bw - 4 * sc; wx += 4 * sc) {
+            if (Math.random() < winA) { g.fillStyle = `rgba(255,${(200 + Math.random() * 50) | 0},${(150 + Math.random() * 90) | 0},${rand(0.4, 0.9)})`; g.fillRect(wx, wy, 1.6 * sc, 2.2 * sc); }
+          }
+          x += bw;
+        }
+      };
+      const base = (this.base = h * 0.74);
+      skyline(base, 0.05, 0.11, '#1c1236', 0.18);
+      skyline(base, 0.02, 0.07, '#110a22', 0.3);
+      // 霓虹招牌（韓文）
+      this.signs = [];
+      const words = ['서울', '노래방', '치킨', '카페', '한강'];
+      const cols = ['255,80,180', '80,220,255', '255,200,80', '160,120,255', '120,255,180'];
+      const spots = [[0.12, 0.05], [0.88, 0.07], [0.35, 0.03], [0.66, 0.045], [0.93, 0.02]];
+      spots.forEach(([kx, ky], i) => this.signs.push({ x: kx * w, y: base - ky * h, word: words[i], col: cols[i], ph: rand(0, TAU), s: rand(10, 12) * sc }));
+      // 漢江
+      g.fillStyle = vgrad(g, h, [[base / h, '#1a0c30'], [1, '#04030a']]);
+      g.fillRect(0, base, w, h - base);
+      // 盤浦大橋（橋面在河上）
+      const by = (this.bridgeY = base + h * 0.06);
+      g.fillStyle = '#0c0818'; g.fillRect(0, by - 6 * sc, w, 7 * sc);
+      for (let x = 0; x < w; x += 46 * sc) g.fillRect(x, by, 6 * sc, h * 0.05);
+      g.fillStyle = 'rgba(255,220,150,0.7)';
+      for (let x = 0; x < w; x += 9 * sc) g.fillRect(x, by - 7 * sc, 2 * sc, 1.5 * sc);
+      // 倒影用的柔光條
+      this.refl = [];
+      for (let i = 0; i < (this.low ? 14 : 30); i++) this.refl.push({ x: rand(0, w), y: rand(base + 2, h), wd: rand(10, 30) * sc, col: cols[(Math.random() * cols.length) | 0], ph: rand(0, TAU) });
+      this.nozzles = [];
+      for (let x = 6 * sc; x < w; x += 7 * sc) this.nozzles.push(x);
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.surge *= Math.pow(0.25, s);
+      for (const r of this.refl) r.ph += s * 1.5;
+      for (const p of this.fw) { p.life -= s; if (p.flash) continue; p.px = p.x; p.py = p.y; p.vx *= Math.pow(0.4, s); p.vy = p.vy * Math.pow(0.4, s) + 40 * s * this.sc; p.x += p.vx * s; p.y += p.vy * s; }
+      this.fw = this.fw.filter((p) => p.life > 0);
+    }
+    firework(x, y, big) {
+      const n = (this.low ? 24 : 54) * (big ? 1.4 : 1);
+      const cols = ['255,90,200', '90,220,255', '255,230,120', '180,140,255'];
+      const col = cols[(Math.random() * cols.length) | 0];
+      const sp = rand(60, 110) * this.sc * (big ? 1.4 : 1);
+      for (let i = 0; i < n; i++) { const a = (i / n) * TAU; this.fw.push({ x, y, px: x, py: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1, 1.5), max: 1.5, col }); }
+      this.fw.push({ flash: true, x, y, life: 0.25, max: 0.25, r: sp });
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h, sc = this.sc;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      // 塔頂燈隨節拍換色
+      const hue = (t / 40) % 360;
+      const tc = `hsla(${hue},90%,65%,`;
+      const tgx = this.tx, tgy = this.tt + h * 0.05;
+      const gr = g.createRadialGradient(tgx, tgy, 0, tgx, tgy, 40 * sc * (1 + beat * 0.4));
+      gr.addColorStop(0, tc + '0.6)'); gr.addColorStop(1, tc + '0)');
+      g.fillStyle = gr; g.fillRect(tgx - 60 * sc, tgy - 60 * sc, 120 * sc, 120 * sc);
+      // 霓虹招牌
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const sg of this.signs) {
+        const on = 0.75 + 0.25 * Math.sin(t / 300 + sg.ph) + beat * 0.2;
+        g.font = `700 ${sg.s}px "Noto Sans KR", "Apple SD Gothic Neo", sans-serif`;
+        g.shadowColor = `rgba(${sg.col},1)`; g.shadowBlur = 10 * sc;
+        g.fillStyle = `rgba(${sg.col},${Math.min(1, on)})`;
+        g.fillText(sg.word, sg.x, sg.y);
+      }
+      g.shadowBlur = 0;
+      // 河面倒影
+      for (const r of this.refl) {
+        const a = 0.12 + 0.1 * Math.sin(r.ph);
+        g.fillStyle = `rgba(${r.col},${a})`;
+        g.fillRect(r.x + Math.sin(r.ph * 0.7) * 4, r.y, r.wd, 1.5);
+      }
+      // 月光彩虹噴泉：橋邊一排水柱拋物線落入河中，顏色沿橋流動
+      const by = this.bridgeY - 3 * sc;
+      const power = 1 + this.surge;
+      g.lineWidth = 1.6 * sc;
+      for (let i = 0; i < this.nozzles.length; i++) {
+        const x0 = this.nozzles[i];
+        if (x0 > B.x && x0 < B.x + B.w && by < B.y + B.h) continue;
+        const hh = (360 * i / this.nozzles.length + t / 25) % 360;
+        const reach = (26 + 8 * Math.sin(t / 700 + i * 0.4)) * sc * power;
+        const fall = (h - by) * 0.55;
+        g.strokeStyle = `hsla(${hh},95%,65%,${0.45 + beat * 0.2})`;
+        g.beginPath(); g.moveTo(x0, by); g.quadraticCurveTo(x0 + reach * 0.6, by - 6 * sc * power, x0 + reach, by + fall); g.stroke();
+        if (!this.low && i % 3 === 0) {
+          const k = (t / 600 + i * 0.37) % 1;
+          const px = x0 + reach * k, py = by + (by + fall - by) * k * k - 6 * sc * power * 4 * k * (1 - k);
+          g.fillStyle = `hsla(${hh},100%,80%,0.8)`; g.fillRect(px, py, 2 * sc, 2 * sc);
+        }
+      }
+      // 煙火
+      g.lineCap = 'round';
+      for (const p of this.fw) {
+        const k = p.life / p.max;
+        if (p.flash) { glow(g, p.x, p.y, p.r, '255,240,255', 0.45 * k); continue; }
+        g.strokeStyle = `rgba(${p.col},${Math.min(1, k * 1.5)})`; g.lineWidth = 1.5 * sc;
+        g.beginPath(); g.moveTo(p.px, p.py); g.lineTo(p.x, p.y); g.stroke();
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d) {
+      this.surge = Math.min(2, this.surge + 0.35 * d.lines);
+      const n = Math.min(4, d.lines - 1 + (d.lines >= 4 ? 2 : 0) + (d.tspin ? 1 : 0));
+      for (let i = 0; i < n; i++) this.firework(rand(0.1, 0.9) * this.w, rand(0.05, 0.3) * this.h, d.lines >= 4);
+    }
+  }
+
   root.LumenScenes = {
     星空: Starfield, 深海: DeepSea, 竹林: Bamboo, 極光: Aurora, 水墨: InkWash, 螢火森林: Firefly, 霓虹都市: NeonCity,
     敦煌: Dunhuang, 櫻花: Sakura, 冰晶洞窟: IceCave, 燈節: Lantern, 雨夜: RainyCity, 熔岩: Lava, 夕陽雲海: Sunset,
     長城: GreatWall, 荷塘月色: LotusPond, 仙山: FairyPeaks,
     土星環: Saturn, 楓紅: Maple, 海上風暴: Storm, 飛龍: Dragon,
+    景福宮: Gyeongbokgung, 韓屋月夜: HanokMoon, 首爾夜光: SeoulNight,
   };
 })(typeof self !== 'undefined' ? self : this);
