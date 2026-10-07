@@ -44,84 +44,248 @@
   }
 
   // =========================================================
-  // 0 星空：星雲 + 向外飛行的星點（消行時曲速）
+  // 共用：帶十字光芒的星星、流星（發光頭 + 長尾 + 碎屑）
   // =========================================================
-  class Starfield {
-    constructor(low) { this.low = low; this.warp = 0; this.shoots = []; }
-    resize(w, h) {
-      this.w = w; this.h = h;
-      const L = (this.bg = layer(w, h));
-      const g = L.g;
-      g.fillStyle = vgrad(g, h, [[0, '#04061a'], [0.5, '#0d0a2c'], [1, '#1c0b3c']]);
-      g.fillRect(0, 0, w, h);
-      g.globalCompositeOperation = 'lighter';
-      const cols = ['90,60,210', '40,110,230', '200,60,170', '40,170,210', '120,80,255'];
-      for (let i = 0; i < 8; i++) {
-        glow(g, rand(0, w), rand(0, h), rand(0.25, 0.6) * Math.max(w, h), cols[i % cols.length], rand(0.07, 0.16));
+  function starSprite(col) {
+    const S = layer(64, 64);
+    const g = S.g;
+    g.globalCompositeOperation = 'lighter';
+    const core = g.createRadialGradient(32, 32, 0, 32, 32, 14);
+    core.addColorStop(0, 'rgba(255,255,255,1)'); core.addColorStop(0.25, `rgba(${col},0.8)`); core.addColorStop(1, `rgba(${col},0)`);
+    g.fillStyle = core; g.fillRect(0, 0, 64, 64);
+    const spike = (ang, len, wd, a) => {
+      g.save(); g.translate(32, 32); g.rotate(ang);
+      const gr = g.createLinearGradient(-len, 0, len, 0);
+      gr.addColorStop(0, `rgba(${col},0)`); gr.addColorStop(0.5, `rgba(255,255,255,${a})`); gr.addColorStop(1, `rgba(${col},0)`);
+      g.fillStyle = gr; g.fillRect(-len, -wd / 2, len * 2, wd);
+      g.restore();
+    };
+    spike(0, 31, 1.6, 0.9); spike(Math.PI / 2, 31, 1.6, 0.9);
+    spike(Math.PI / 4, 16, 1, 0.45); spike(-Math.PI / 4, 16, 1, 0.45);
+    return S;
+  }
+
+  class Meteors {
+    constructor(sc) { this.sc = sc; this.list = []; this.bits = []; this.head = starSprite('200,225,255'); }
+    spawn(x, y, ang, speed, len, col) {
+      this.list.push({ x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, len, life: 0, max: rand(0.9, 1.6), col: col || '210,230,255' });
+    }
+    random(w, h, big) {
+      const ang = rand(0.45, 0.85) + (Math.random() < 0.5 ? 0 : Math.PI / 2 - 0.2);
+      const fromRight = Math.cos(ang) < 0;
+      this.spawn(fromRight ? rand(0.4, 1.1) * w : rand(-0.1, 0.6) * w, rand(-0.05, 0.35) * h, ang, rand(500, 900) * this.sc * (big ? 1.3 : 1), rand(140, 260) * this.sc * (big ? 1.5 : 1),
+        ['210,230,255', '255,220,180', '190,255,230', '255,190,230'][(Math.random() * 4) | 0]);
+    }
+    update(s) {
+      for (const m of this.list) {
+        m.life += s; m.x += m.vx * s; m.y += m.vy * s;
+        if (Math.random() < 0.6) this.bits.push({ x: m.x, y: m.y, vx: m.vx * 0.05 + rand(-20, 20), vy: m.vy * 0.05 + rand(-10, 20), life: rand(0.3, 0.7), col: m.col });
       }
-      for (let i = 0; i < 420; i++) {
-        g.fillStyle = `rgba(220,225,255,${rand(0.1, 0.55)})`;
-        const s = rand(0.5, 1.3);
-        g.fillRect(rand(0, w), rand(0, h), s, s);
+      this.list = this.list.filter((m) => m.life < m.max);
+      for (const b of this.bits) { b.x += b.vx * s; b.y += b.vy * s; b.life -= s; }
+      this.bits = this.bits.filter((b) => b.life > 0);
+      if (this.bits.length > 400) this.bits.splice(0, this.bits.length - 400);
+    }
+    draw(g) {
+      g.globalCompositeOperation = 'lighter';
+      for (const b of this.bits) { g.fillStyle = `rgba(${b.col},${b.life})`; g.fillRect(b.x, b.y, 1.4, 1.4); }
+      for (const m of this.list) {
+        const k = m.life / m.max;
+        const a = Math.sin(Math.min(1, k) * Math.PI);
+        const sp = Math.hypot(m.vx, m.vy);
+        const tx = m.x - (m.vx / sp) * m.len, ty = m.y - (m.vy / sp) * m.len;
+        const gr = g.createLinearGradient(m.x, m.y, tx, ty);
+        gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(0.15, `rgba(${m.col},${a * 0.7})`); gr.addColorStop(1, `rgba(${m.col},0)`);
+        g.strokeStyle = gr; g.lineCap = 'round';
+        g.lineWidth = 4 * this.sc; g.globalAlpha = 0.35;
+        g.beginPath(); g.moveTo(m.x, m.y); g.lineTo(tx, ty); g.stroke();
+        g.lineWidth = 1.6 * this.sc; g.globalAlpha = 1;
+        g.beginPath(); g.moveTo(m.x, m.y); g.lineTo(tx, ty); g.stroke();
+        const hs = 26 * this.sc * (0.6 + a * 0.4);
+        g.globalAlpha = a;
+        g.drawImage(this.head.cv, m.x - hs / 2, m.y - hs / 2, hs, hs);
+        g.globalAlpha = 1;
       }
       g.globalCompositeOperation = 'source-over';
-      const n = this.low ? 60 : 150;
+    }
+  }
+
+  // =========================================================
+  // 0 星空：銀河帶、漂移的星雲、光芒星、曲速星場、流星與彗星
+  // =========================================================
+  class Starfield {
+    constructor(low) { this.low = low; this.warp = 0; this.intensity = 0; this.flash = 0; this.comet = null; this.cometTimer = rand(12, 25); this.meteorTimer = 2; }
+    setIntensity(v) { this.intensity = v; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#02030c'], [0.5, '#080a24'], [1, '#140a2e']]);
+      g.fillRect(0, 0, w, h);
+      // 銀河帶（對角）
+      g.save();
+      g.translate(w * 0.5, h * 0.45); g.rotate(-0.55);
+      g.globalCompositeOperation = 'lighter';
+      const D = Math.hypot(w, h);
+      for (let i = 0; i < 26; i++) {
+        const x = rand(-0.6, 0.6) * D, y = rand(-0.06, 0.06) * D;
+        const r = rand(0.06, 0.16) * D;
+        const c = ['120,140,255', '180,120,255', '255,160,200', '120,200,255'][i % 4];
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(${c},0.2)`); gr.addColorStop(1, `rgba(${c},0)`);
+        g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      for (let i = 0; i < (this.low ? 1000 : 2400); i++) {
+        const x = rand(-0.6, 0.6) * D, y = (Math.random() + Math.random() + Math.random() - 1.5) * 0.06 * D;
+        g.fillStyle = `rgba(230,235,255,${rand(0.15, 0.7)})`;
+        const s = rand(0.4, 1.2); g.fillRect(x, y, s, s);
+      }
+      // 暗塵帶
+      g.globalCompositeOperation = 'source-over';
+      for (let i = 0; i < 14; i++) {
+        const x = rand(-0.5, 0.5) * D, y = rand(-0.015, 0.015) * D, r = rand(0.02, 0.06) * D;
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, 'rgba(4,4,14,0.45)'); gr.addColorStop(1, 'rgba(4,4,14,0)');
+        g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      g.restore();
+      // 遠方星系
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 2; i++) {
+        const x = rand(0.1, 0.9) * w, y = rand(0.1, 0.9) * h, r = rand(14, 26) * sc;
+        g.save(); g.translate(x, y); g.rotate(rand(0, TAU)); g.scale(1, 0.4);
+        const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
+        gr.addColorStop(0, 'rgba(255,240,220,0.7)'); gr.addColorStop(0.2, 'rgba(220,200,255,0.25)'); gr.addColorStop(1, 'rgba(160,140,255,0)');
+        g.fillStyle = gr; g.fillRect(-r, -r, r * 2, r * 2); g.restore();
+      }
+      // 背景小星（多種色溫）
+      for (let i = 0; i < (this.low ? 300 : 650); i++) {
+        const c = ['230,235,255', '200,215,255', '255,235,200', '255,210,180'][(Math.random() * 4) | 0];
+        g.fillStyle = `rgba(${c},${rand(0.15, 0.7)})`;
+        const s = rand(0.5, 1.5); g.fillRect(rand(0, w), rand(0, h), s, s);
+      }
+      g.globalCompositeOperation = 'source-over';
+      // 星雲層（會緩慢漂移、呼吸）
+      this.nebulae = [];
+      for (const cols of [['110,80,255', '255,90,180'], ['60,170,255', '150,90,255']]) {
+        const N = layer(w * 0.6, h * 0.6);
+        const ng = N.g;
+        ng.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 18; i++) {
+          const r = rand(0.05, 0.12) * w;
+          const x = rand(0.25, 0.75) * w * 0.6, y = rand(0.25, 0.75) * h * 0.6;
+          const gr = ng.createRadialGradient(x, y, 0, x, y, r);
+          const c = cols[i % 2];
+          gr.addColorStop(0, `rgba(${c},0.16)`); gr.addColorStop(0.5, `rgba(${c},0.06)`); gr.addColorStop(1, `rgba(${c},0)`);
+          ng.fillStyle = gr; ng.fillRect(x - r, y - r, r * 2, r * 2);
+        }
+        this.nebulae.push({ L: N, x: rand(-0.2, 0.4) * w, y: rand(-0.2, 0.4) * h, vx: rand(-4, 4), vy: rand(-3, 3), ph: rand(0, TAU) });
+      }
+      this.sprites = ['255,255,255', '170,200,255', '255,220,170', '200,170,255'].map(starSprite);
+      this.bright = [];
+      for (let i = 0; i < (this.low ? 14 : 30); i++) this.bright.push({ x: rand(0, w), y: rand(0, h), s: rand(8, 22) * sc, k: (Math.random() * 4) | 0, ph: rand(0, TAU), sp: rand(0.6, 1.8) });
       this.stars = [];
-      for (let i = 0; i < n; i++) this.stars.push(this.newStar(Math.random()));
+      for (let i = 0; i < (this.low ? 50 : 110); i++) this.stars.push(this.newStar(Math.random()));
+      this.meteors = new Meteors(sc);
     }
     newStar(r) {
-      return { a: rand(0, TAU), r: r != null ? r : rand(0.01, 0.12), v: rand(0.012, 0.035), s: rand(0.7, 1.8), c: Math.random() < 0.2 ? '170,200,255' : Math.random() < 0.1 ? '255,200,240' : '255,255,255' };
+      return { a: rand(0, TAU), r: r != null ? r : rand(0.01, 0.12), v: rand(0.012, 0.035), s: rand(0.8, 2.2), c: Math.random() < 0.25 ? '170,200,255' : Math.random() < 0.15 ? '255,200,240' : '255,255,255' };
     }
     update(dt) {
       const s = dt / 1000;
       this.warp *= Math.pow(0.22, s);
-      const k = 1 + this.warp * 14;
+      this.flash *= Math.pow(0.1, s);
+      const k = 1 + this.warp * 14 + this.intensity * 0.25;
       for (let i = 0; i < this.stars.length; i++) {
         const st = this.stars[i];
         st.pr = st.r;
         st.r += st.v * k * s * (0.4 + st.r);
         if (st.r > 1.2) this.stars[i] = this.newStar();
       }
-      if (!this.low && Math.random() < s * 0.12) {
-        this.shoots.push({ x: rand(0, this.w), y: rand(0, this.h * 0.5), vx: rand(-500, -250), vy: rand(150, 300), life: 0.9 });
+      for (const n of this.nebulae) { n.x += n.vx * s; n.y += n.vy * s; n.ph += s * 0.3; if (n.x < -0.4 * this.w || n.x > 0.8 * this.w) n.vx = -n.vx; if (n.y < -0.4 * this.h || n.y > 0.8 * this.h) n.vy = -n.vy; }
+      for (const b of this.bright) b.ph += s * b.sp * (1 + this.intensity * 0.2);
+      // 流星：強度越高越頻繁，高潮時下流星雨
+      this.meteorTimer -= s;
+      if (this.meteorTimer <= 0) {
+        const n = this.intensity >= 5 ? (this.low ? 2 : 4) : 1;
+        for (let i = 0; i < n; i++) this.meteors.random(this.w, this.h, false);
+        this.meteorTimer = this.intensity >= 5 ? rand(0.6, 1.5) : rand(2.5, 6) / (1 + this.intensity * 0.3);
       }
-      for (const sh of this.shoots) { sh.x += sh.vx * s; sh.y += sh.vy * s; sh.life -= s; }
-      this.shoots = this.shoots.filter((sh) => sh.life > 0);
+      this.meteors.update(s);
+      // 彗星
+      this.cometTimer -= s;
+      if (!this.comet && this.cometTimer <= 0) {
+        const fromLeft = Math.random() < 0.5;
+        this.comet = { x: fromLeft ? -0.2 * this.w : 1.2 * this.w, y: rand(0.1, 0.4) * this.h, vx: (fromLeft ? 1 : -1) * rand(25, 40) * this.sc, vy: rand(4, 12) * this.sc };
+      }
+      if (this.comet) {
+        this.comet.x += this.comet.vx * s; this.comet.y += this.comet.vy * s;
+        if (this.comet.x < -0.4 * this.w || this.comet.x > 1.4 * this.w) { this.comet = null; this.cometTimer = rand(20, 40); }
+      }
     }
     draw(g, t, beat, B) {
-      g.drawImage(this.bg.cv, 0, 0, this.w, this.h);
-      const cx = B.cx, cy = B.cy;
-      const R = Math.hypot(this.w, this.h) * 0.62;
+      const w = this.w, h = this.h, ts = t / 1000;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
       g.globalCompositeOperation = 'lighter';
-      const bright = 0.65 + beat * 0.35;
+      const nb = 0.55 + this.intensity * 0.09 + beat * 0.15 + this.flash * 0.5;
+      for (const n of this.nebulae) {
+        g.globalAlpha = Math.min(1, nb * (0.75 + 0.25 * Math.sin(n.ph)));
+        g.drawImage(n.L.cv, n.x, n.y, w * 1.4, h * 1.4);
+      }
+      g.globalAlpha = 1;
+      // 光芒星
+      for (const b of this.bright) {
+        const tw = 0.55 + 0.45 * Math.sin(b.ph);
+        const sz = b.s * (0.7 + 0.3 * tw) * (1 + beat * 0.25);
+        g.globalAlpha = 0.5 + 0.5 * tw;
+        g.drawImage(this.sprites[b.k].cv, b.x - sz, b.y - sz, sz * 2, sz * 2);
+      }
+      g.globalAlpha = 1;
+      // 曲速星場
+      const cx = B.cx, cy = B.cy;
+      const R = Math.hypot(w, h) * 0.62;
+      const bright = 0.7 + beat * 0.3;
       const streak = this.warp > 0.06;
       for (const st of this.stars) {
         const a = Math.min(1, st.r * 2.2) * bright;
-        const x = cx + Math.cos(st.a) * st.r * R;
-        const y = cy + Math.sin(st.a) * st.r * R;
+        const x = cx + Math.cos(st.a) * st.r * R, y = cy + Math.sin(st.a) * st.r * R;
         if (streak) {
-          const pr = Math.max(0, st.r - (st.r - st.pr) * 4 - this.warp * 0.04);
-          g.strokeStyle = `rgba(${st.c},${a})`;
-          g.lineWidth = st.s * (0.4 + st.r);
-          g.beginPath();
-          g.moveTo(cx + Math.cos(st.a) * pr * R, cy + Math.sin(st.a) * pr * R);
-          g.lineTo(x, y);
-          g.stroke();
+          const pr = Math.max(0, st.r - (st.r - st.pr) * 5 - this.warp * 0.05);
+          g.strokeStyle = `rgba(${st.c},${a})`; g.lineWidth = st.s * (0.5 + st.r);
+          g.beginPath(); g.moveTo(cx + Math.cos(st.a) * pr * R, cy + Math.sin(st.a) * pr * R); g.lineTo(x, y); g.stroke();
         } else {
-          const sz = st.s * (0.4 + st.r * 1.2);
+          const sz = st.s * (0.5 + st.r * 1.4);
           g.fillStyle = `rgba(${st.c},${a})`;
-          g.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+          g.beginPath(); g.arc(x, y, sz * 0.6, 0, TAU); g.fill();
         }
       }
-      for (const sh of this.shoots) {
-        const gr = g.createLinearGradient(sh.x, sh.y, sh.x - sh.vx * 0.15, sh.y - sh.vy * 0.15);
-        gr.addColorStop(0, `rgba(255,255,255,${sh.life})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
-        g.strokeStyle = gr; g.lineWidth = 1.5;
-        g.beginPath(); g.moveTo(sh.x, sh.y); g.lineTo(sh.x - sh.vx * 0.15, sh.y - sh.vy * 0.15); g.stroke();
+      // 彗星：白色塵埃尾（彎）＋藍色離子尾（直）
+      if (this.comet) {
+        const c = this.comet, sc = this.sc;
+        const dir = Math.sign(c.vx);
+        const ion = g.createLinearGradient(c.x, c.y, c.x - dir * 260 * sc, c.y - 40 * sc);
+        ion.addColorStop(0, 'rgba(140,200,255,0.55)'); ion.addColorStop(1, 'rgba(140,200,255,0)');
+        g.strokeStyle = ion; g.lineWidth = 3 * sc;
+        g.beginPath(); g.moveTo(c.x, c.y); g.lineTo(c.x - dir * 260 * sc, c.y - 40 * sc); g.stroke();
+        for (let i = 0; i < 6; i++) {
+          const dust = g.createLinearGradient(c.x, c.y, c.x - dir * 200 * sc, c.y + 20 * sc);
+          dust.addColorStop(0, 'rgba(255,240,220,0.18)'); dust.addColorStop(1, 'rgba(255,240,220,0)');
+          g.strokeStyle = dust; g.lineWidth = (14 - i * 2) * sc;
+          g.beginPath(); g.moveTo(c.x, c.y); g.quadraticCurveTo(c.x - dir * 100 * sc, c.y + (6 + i * 3) * sc, c.x - dir * (180 + i * 10) * sc, c.y + (24 + i * 6) * sc); g.stroke();
+        }
+        const hs = 34 * sc;
+        g.drawImage(this.sprites[1].cv, c.x - hs, c.y - hs, hs * 2, hs * 2);
       }
       g.globalCompositeOperation = 'source-over';
+      this.meteors.draw(g);
     }
-    burst(d) { this.warp = Math.min(1.4, this.warp + 0.18 * d.lines + (d.lines >= 4 ? 0.5 : 0) + (d.tspin ? 0.3 : 0)); }
+    burst(d) {
+      this.warp = Math.min(1.4, this.warp + 0.18 * d.lines + (d.lines >= 4 ? 0.5 : 0) + (d.tspin ? 0.3 : 0));
+      this.flash = Math.min(1.2, this.flash + 0.2 * d.lines);
+      const n = d.lines >= 4 ? 4 : d.lines >= 2 ? 1 : 0;
+      for (let i = 0; i < n; i++) this.meteors.random(this.w, this.h, true);
+    }
   }
 
   // =========================================================
@@ -330,89 +494,178 @@
   }
 
   // =========================================================
-  // 2 極光：雪山夜空與飄動的光幕
+  // 2 極光：雪山、湖面倒影、松林；光柱結構的極光帷幕會變色、湧動；流星
   // =========================================================
+  const AURORA_PALETTES = [
+    ['120,255,180', '90,255,150', '170,110,255'],
+    ['90,240,255', '120,255,200', '255,120,210'],
+    ['200,140,255', '120,255,190', '255,110,150'],
+  ];
   class Aurora {
-    constructor(low) { this.low = low; this.flash = 0; }
+    constructor(low) { this.low = low; this.flash = 0; this.intensity = 0; this.surges = []; this.meteorTimer = 4; this.pal = 0; this.palT = 0; }
+    setIntensity(v) { this.intensity = v; }
     resize(w, h) {
       this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      this.lake = h * 0.83;
       const L = (this.bg = layer(w, h));
       const g = L.g;
-      g.fillStyle = vgrad(g, h, [[0, '#01020a'], [0.5, '#04101f'], [0.8, '#0a2234'], [1, '#03080f']]);
+      g.fillStyle = vgrad(g, h, [[0, '#010309'], [0.45, '#03111f'], [0.78, '#0a2537'], [0.83, '#0d2a3a'], [1, '#02070c']]);
       g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 260; i++) {
-        g.fillStyle = `rgba(230,240,255,${rand(0.15, 0.7)})`;
-        const s = rand(0.5, 1.4);
-        g.fillRect(rand(0, w), rand(0, h * 0.75), s, s);
+      for (let i = 0; i < (this.low ? 250 : 500); i++) {
+        g.fillStyle = `rgba(230,240,255,${rand(0.12, 0.75)})`;
+        const s = rand(0.5, 1.5); g.fillRect(rand(0, w), rand(0, this.lake * 0.85), s, s);
       }
-      const mountain = (base, amp, color, seed, cap) => {
-        g.fillStyle = color;
-        g.beginPath(); g.moveTo(0, h);
+      // 雪山（受極光微光照亮的稜線）
+      const mountain = (base, amp, color, seed, rim) => {
         const pts = [];
-        for (let x = 0; x <= w + 30; x += 30) {
-          const y = base - Math.abs(Math.sin(x * 0.006 + seed)) * amp - Math.sin(x * 0.021 + seed * 2) * amp * 0.25;
-          pts.push([x, y]); g.lineTo(x, y);
-        }
-        g.lineTo(w, h); g.closePath(); g.fill();
-        if (cap) {
-          g.strokeStyle = 'rgba(200,230,255,0.18)'; g.lineWidth = 1.5;
+        for (let x = -20; x <= w + 20; x += 12) pts.push([x, base - Math.abs(Math.sin(x * 0.006 + seed)) * amp - Math.sin(x * 0.021 + seed * 2) * amp * 0.25 - Math.abs(Math.sin(x * 0.05 + seed)) * amp * 0.08]);
+        g.fillStyle = color;
+        g.beginPath(); g.moveTo(-20, this.lake);
+        for (const [x, y] of pts) g.lineTo(x, y);
+        g.lineTo(w + 20, this.lake); g.closePath(); g.fill();
+        if (rim) {
+          g.strokeStyle = rim; g.lineWidth = 1.2;
           g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+          // 稜線下的雪光：沿稜線往下漸淡
+          for (let k = 1; k <= 6; k++) {
+            g.strokeStyle = `rgba(190,235,255,${0.07 - k * 0.01})`; g.lineWidth = 2;
+            g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y + k * 3) : g.moveTo(x, y + k * 3))); g.stroke();
+          }
         }
       };
-      mountain(h * 0.84, h * 0.14, '#0a1726', 1.3, true);
-      mountain(h * 0.92, h * 0.09, '#040912', 4.1, false);
-      // 光幕條紋素材
+      mountain(this.lake - h * 0.02, h * 0.18, '#0b1a2a', 1.3, 'rgba(160,255,210,0.35)');
+      mountain(this.lake, h * 0.09, '#050c15', 4.1, null);
+      // 松林剪影
+      g.fillStyle = '#02060a';
+      for (let i = 0; i < 40; i++) {
+        const x = rand(0, w), th = rand(10, 26) * sc, y = this.lake + 1;
+        g.beginPath(); g.moveTo(x, y - th); g.lineTo(x - th * 0.28, y); g.lineTo(x + th * 0.28, y); g.fill();
+      }
+      g.fillStyle = 'rgba(2,6,10,1)'; g.fillRect(0, this.lake + 1, w, 2);
+      // 光柱條紋素材（下緣亮、上緣漸淡並偏色）
       this.strips = [];
-      for (const [lo, hi] of [['90,255,170', '170,90,255'], ['70,210,255', '120,255,200'], ['170,100,255', '255,110,200']]) {
+      for (const pal of AURORA_PALETTES) {
         const S = layer(4, 256);
         const gr = S.g.createLinearGradient(0, 0, 0, 256);
-        gr.addColorStop(0, `rgba(${hi},0)`);
-        gr.addColorStop(0.45, `rgba(${hi},0.28)`);
-        gr.addColorStop(0.88, `rgba(${lo},0.95)`);
-        gr.addColorStop(1, `rgba(${lo},0)`);
+        gr.addColorStop(0, `rgba(${pal[2]},0)`);
+        gr.addColorStop(0.35, `rgba(${pal[2]},0.22)`);
+        gr.addColorStop(0.7, `rgba(${pal[1]},0.6)`);
+        gr.addColorStop(0.9, `rgba(${pal[0]},1)`);
+        gr.addColorStop(0.96, 'rgba(235,255,250,0.85)');
+        gr.addColorStop(1, `rgba(${pal[0]},0.15)`);
         S.g.fillStyle = gr; S.g.fillRect(0, 0, 4, 256);
         this.strips.push(S);
       }
+      this.cs = 1 / 3;
+      this.cbuf = document.createElement('canvas');
+      this.cbuf.width = Math.max(1, Math.round(w * this.cs)); this.cbuf.height = Math.max(1, Math.round(h * this.cs));
+      this.cg = this.cbuf.getContext('2d');
+      this.cbuf2 = document.createElement('canvas');
+      this.cbuf2.width = this.cbuf.width; this.cbuf2.height = this.cbuf.height;
+      this.cg2 = this.cbuf2.getContext('2d');
       this.ribbons = [
-        { base: 0.3, hgt: 0.3, sp: 1, ph: 0, strip: 0, amp: 0.05 },
-        { base: 0.22, hgt: 0.22, sp: 0.7, ph: 2, strip: 1, amp: 0.04 },
-        { base: 0.4, hgt: 0.2, sp: 1.3, ph: 4, strip: 2, amp: 0.035 },
+        { base: 0.34, hgt: 0.34, sp: 1, ph: 0, amp: 0.06 },
+        { base: 0.24, hgt: 0.24, sp: 0.7, ph: 2, amp: 0.045 },
+        { base: 0.44, hgt: 0.22, sp: 1.3, ph: 4, amp: 0.04 },
       ];
       if (this.low) this.ribbons.length = 2;
-      this.snow = [];
-      for (let i = 0; i < (this.low ? 15 : 40); i++) this.snow.push({ x: rand(0, w), y: rand(0, h), v: rand(10, 30), s: rand(0.8, 2) });
+      this.mist = [];
+      for (let i = 0; i < 4; i++) this.mist.push({ x: rand(0, w), y: this.lake - rand(0, 0.05) * h, r: rand(0.25, 0.45) * w, v: rand(3, 8) });
+      this.bright = ['220,240,255', '180,255,220'].map(starSprite);
+      this.bstars = [];
+      for (let i = 0; i < 14; i++) this.bstars.push({ x: rand(0, w), y: rand(0, this.lake * 0.6), s: rand(6, 14) * sc, ph: rand(0, TAU), k: i % 2 });
+      this.meteors = new Meteors(sc);
     }
     update(dt) {
       const s = dt / 1000;
       this.flash *= Math.pow(0.15, s);
-      for (const p of this.snow) { p.y += p.v * s; p.x += Math.sin(p.y * 0.02) * 0.3; if (p.y > this.h) { p.y = -5; p.x = rand(0, this.w); } }
+      this.palT += s;
+      if (this.palT > 18) { this.palT = 0; this.pal = (this.pal + 1) % AURORA_PALETTES.length; }
+      // 湧動：沿光幕跑動的增亮波
+      if (Math.random() < s * (0.15 + this.intensity * 0.12)) this.surges.push({ x: rand(-0.2, 0.2) * this.w, v: rand(120, 260) * this.sc * (Math.random() < 0.5 ? 1 : -1), t: 0, r: rand(0, this.ribbons.length) | 0 });
+      for (const sg of this.surges) { sg.t += s; sg.x += sg.v * s; }
+      this.surges = this.surges.filter((sg) => sg.t < 4);
+      for (const m of this.mist) { m.x += m.v * s; if (m.x - m.r > this.w) m.x = -m.r; }
+      for (const b of this.bstars) b.ph += s * 1.2;
+      this.meteorTimer -= s;
+      if (this.meteorTimer <= 0) { this.meteors.random(this.w, this.lake, false); this.meteorTimer = rand(4, 9) / (1 + this.intensity * 0.25); }
+      this.meteors.update(s);
+    }
+    drawCurtains(g, t, beat) {
+      const S = this.cs;
+      const w = this.w * S, h = this.h * S, ts = t / 1000;
+      const step = this.low ? 2 : 1;
+      const bright = 0.7 + beat * 0.25 + this.flash * 0.6 + this.intensity * 0.06;
+      const palNext = (this.pal + 1) % AURORA_PALETTES.length;
+      const mixK = Math.max(0, (this.palT - 14) / 4);
+      this.ribbons.forEach((r, ri) => {
+        const hh = r.hgt * h * (1 + this.flash * 0.25 + this.intensity * 0.03);
+        for (let x = 0; x < w; x += step) {
+          const X = x / S;
+          const fold = Math.sin(X * 0.0045 + ts * 0.32 * r.sp + r.ph) * h * r.amp + Math.sin(X * 0.013 - ts * 0.55 * r.sp + r.ph * 2) * h * r.amp * 0.4;
+          const y = r.base * h + fold;
+          // 光柱結構：細碎、緩慢移動的亮度起伏
+          const rays = 0.68 + 0.32 * Math.sin(X * 0.06 + ts * 1.5 + ri) * Math.sin(X * 0.021 - ts * 0.9);
+          let a = (0.38 + 0.3 * Math.sin(X * 0.011 + ts * 0.8 * r.sp + r.ph)) * rays * bright;
+          for (const sg of this.surges) if (sg.r === ri) { const d = Math.abs(X - sg.x); if (d < 80 * this.sc) a += (1 - d / (80 * this.sc)) * 0.6 * (1 - sg.t / 4); }
+          if (a <= 0.02) continue;
+          const len = hh * (0.75 + 0.35 * rays);
+          g.globalAlpha = Math.min(1, a * (1 - mixK));
+          g.drawImage(this.strips[this.pal].cv, x, Math.round(y - len), step, Math.round(len));
+          if (mixK > 0) { g.globalAlpha = Math.min(1, a * mixK); g.drawImage(this.strips[palNext].cv, x, Math.round(y - len), step, Math.round(len)); }
+        }
+      });
+      g.globalAlpha = 1;
     }
     draw(g, t, beat, B) {
       const w = this.w, h = this.h;
       g.drawImage(this.bg.cv, 0, 0, w, h);
+      // 先畫到低解析緩衝，再放大：光幕自然柔化
+      const cg = this.cg;
+      cg.globalCompositeOperation = 'source-over';
+      cg.clearRect(0, 0, this.cbuf.width, this.cbuf.height);
+      cg.globalCompositeOperation = 'lighter';
+      this.drawCurtains(cg, t, beat);
+      // 輕微模糊，讓光幕像雲霧般柔和
+      const cg2 = this.cg2;
+      cg2.clearRect(0, 0, this.cbuf2.width, this.cbuf2.height);
+      cg2.filter = 'blur(1.6px)';
+      cg2.drawImage(this.cbuf, 0, 0);
+      cg2.filter = 'none';
       g.globalCompositeOperation = 'lighter';
-      const step = this.low ? 10 : 6;
-      const bright = 0.75 + beat * 0.3 + this.flash * 0.6;
-      const ts = t / 1000;
-      for (const r of this.ribbons) {
-        const S = this.strips[r.strip];
-        const hh = r.hgt * h * (1 + this.flash * 0.25);
-        for (let x = 0; x < w; x += step) {
-          const y = r.base * h
-            + Math.sin(x * 0.0045 + ts * 0.35 * r.sp + r.ph) * h * r.amp
-            + Math.sin(x * 0.013 - ts * 0.6 * r.sp + r.ph * 2) * h * r.amp * 0.4;
-          const a = (0.3 + 0.3 * Math.sin(x * 0.011 + ts * 0.9 * r.sp + r.ph) + 0.1 * Math.sin(x * 0.029 - ts * 1.3)) * bright;
-          if (a <= 0.02) continue;
-          g.globalAlpha = Math.min(1, a);
-          g.drawImage(S.cv, x, Math.round(y - hh), step, Math.round(hh));
-        }
+      for (const b of this.bstars) {
+        const tw = 0.6 + 0.4 * Math.sin(b.ph);
+        g.globalAlpha = tw;
+        g.drawImage(this.bright[b.k].cv, b.x - b.s, b.y - b.s, b.s * 2, b.s * 2);
       }
       g.globalAlpha = 1;
-      g.fillStyle = 'rgba(230,245,255,0.6)';
-      for (const p of this.snow) g.fillRect(p.x, p.y, p.s, p.s);
+      g.drawImage(this.cbuf2, 0, 0, w, h);
+      g.globalAlpha = 0.5;
+      g.drawImage(this.cbuf, 0, 0, w, h);
+      // 湖面倒影
+      g.save();
+      g.beginPath(); g.rect(0, this.lake + 2, w, h - this.lake); g.clip();
+      g.translate(0, this.lake + 2); g.scale(1, -0.3);
+      g.globalAlpha = 0.4;
+      g.drawImage(this.cbuf2, 0, -this.lake, w, h);
+      g.restore();
+      g.globalAlpha = 1;
+      // 水面波紋
+      g.strokeStyle = 'rgba(180,255,220,0.08)'; g.lineWidth = 1;
+      for (let i = 0; i < 10; i++) {
+        const y = this.lake + 6 + i * (h - this.lake) / 10;
+        g.beginPath(); g.moveTo(0, y + Math.sin(t / 800 + i) * 1.5); g.lineTo(w, y + Math.sin(t / 700 + i * 2) * 1.5); g.stroke();
+      }
+      for (const m of this.mist) glow(g, m.x, m.y, m.r, '160,220,220', 0.06);
       g.globalCompositeOperation = 'source-over';
+      this.meteors.draw(g);
     }
-    burst(d) { this.flash = Math.min(1.5, this.flash + 0.2 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
+    burst(d) {
+      this.flash = Math.min(1.5, this.flash + 0.2 * d.lines + (d.lines >= 4 ? 0.5 : 0));
+      for (let i = 0; i < d.lines; i++) this.surges.push({ x: rand(0, 1) * this.w, v: rand(160, 300) * this.sc * (Math.random() < 0.5 ? 1 : -1), t: 0, r: i % this.ribbons.length });
+      if (d.lines >= 4) for (let i = 0; i < 3; i++) this.meteors.random(this.w, this.lake, true);
+    }
   }
 
   // =========================================================

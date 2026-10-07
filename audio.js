@@ -61,7 +61,7 @@
       ],
     },
     {
-      name: '水墨', bpm: 76, vol: 0.72, root: 62, scale: 'gong', prog: [0, 4, 3, 1], sevenths: false, gong: true,
+      name: '水墨', bpm: 76, epic: 'eastern', vol: 0.72, root: 62, scale: 'gong', prog: [0, 4, 3, 1], sevenths: false, gong: true,
       pad: 'warm', arp: 'zheng', bass: 'round', lead: 'dizi', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.3,
       arpSeq: [0, -1, 1, -1, 2, -1, 3, -1, 4, -1, 3, -1, 2, -1, 1, -1],
       bassSeq: 'R-------5-------',
@@ -94,7 +94,7 @@
       ],
     },
     {
-      name: '燈節', bpm: 118, vol: 0.72, root: 55, scale: 'zhi', prog: [0, 3, 1, 4], sevenths: false, gong: true,
+      name: '燈節', bpm: 118, epic: 'eastern', vol: 0.72, root: 55, scale: 'zhi', prog: [0, 3, 1, 4], sevenths: false, gong: true,
       pad: 'saw', arp: 'pipa', bass: 'round', lead: 'erhu', arpOct: 1, bassOct: -1, leadOct: 1, wet: 0.9,
       arpSeq: [0, 1, 2, 1, 3, 2, 1, 0, 0, 2, 4, 2, 3, 1, 2, 1],
       bassSeq: 'R-R-5-R-R-R-5-O-',
@@ -116,7 +116,7 @@
       ],
     },
     {
-      name: '竹林', bpm: 80, root: 60, scale: 'gong', prog: [0, 3, 4, 2], sevenths: false, vol: 0.85,
+      name: '竹林', bpm: 80, epic: 'eastern', root: 60, scale: 'gong', prog: [0, 3, 4, 2], sevenths: false, vol: 0.85,
       pad: 'warm', arp: 'qin', bass: 'round', lead: 'xiao', arpOct: 0, bassOct: -2, leadOct: 0, wet: 1.35,
       arpSeq: [0, -1, -1, 2, -1, -1, 4, -1, 3, -1, -1, 1, -1, -1, 2, -1],
       bassSeq: 'R-------R-------',
@@ -127,7 +127,7 @@
       ],
     },
     {
-      name: '敦煌', bpm: 96, root: 57, scale: 'hijaz', prog: [0, 1, 0, 6], sevenths: false, swing: 0.05, vol: 0.85,
+      name: '敦煌', bpm: 96, epic: 'eastern', root: 57, scale: 'hijaz', prog: [0, 1, 0, 6], sevenths: false, swing: 0.05, vol: 0.85,
       pad: 'choir', arp: 'oud', bass: 'round', lead: 'erhu', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.1,
       arpSeq: [0, 1, 2, 1, 0, -1, 2, 3, 4, 3, 2, -1, 1, 2, 1, 0],
       bassSeq: 'R--R--R-R--R-5--',
@@ -211,6 +211,7 @@
     noiseBuf: null,
     sfxIdx: 0,
     boost: 0,
+    build: false,
     SONGS,
 
     init() {
@@ -226,7 +227,7 @@
       const comp = c.createDynamicsCompressor();
       comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
       this.master = c.createGain();
-      this.master.gain.value = 0.9;
+      this.master.gain.value = 0.82;
       this.masterFilter.connect(comp); comp.connect(this.master); this.master.connect(c.destination);
 
       // 效果：延遲 + 殘響（音樂與音效共用）
@@ -422,6 +423,23 @@
       this.synth(Object.assign({}, P, { t, f, peak: P.peak * v, out }));
     },
 
+    // 弦樂團：五把鋸齒波微微走音疊在一起，慢起慢收
+    strings(t, midis, dur, vel, out) {
+      const v = vel / Math.sqrt(midis.length);
+      for (const m of midis) {
+        this.synth({ t, f: mtof(m), dur, waves: [['sawtooth', -16, 0.22], ['sawtooth', -7, 0.22], ['sawtooth', 0, 0.22], ['sawtooth', 8, 0.22], ['sawtooth', 15, 0.22]],
+          cut: 1300 + vel * 1700, q: 0.5, a: 0.45, s: 0.9, r: 1.1, peak: 0.05 * v, out, wet: 0.6 });
+      }
+    },
+    // 銅管重音：濾波器快速打開再收回
+    brass(t, midis, dur, vel, out) {
+      const v = vel / Math.sqrt(midis.length);
+      for (const m of midis) {
+        this.synth({ t, f: mtof(m), dur, waves: [['sawtooth', -5, 0.5], ['sawtooth', 5, 0.5], ['square', 0, 0.12]],
+          cut: 650, cutEnv: 4, cutTime: 0.2, q: 1.2, a: 0.025, s: 0.7, r: 0.3, peak: 0.06 * v, out, wet: 0.35 });
+      }
+    },
+
     bassNote(t, midi, dur, timbre, out) {
       const P = {
         sub: { waves: [['sine', 0, 1], ['triangle', 0, 0.25]], a: 0.01, s: 0.8, r: 0.12, peak: 0.22 },
@@ -478,6 +496,15 @@
         case 'tom':
           this.synth({ t, f: 72, pitchFrom: 1.7, glide: 0.1, waves: [['sine', 0, 1]], d: 0.55, peak: 0.5 * v, out, wet: 0.25 });
           this.noise({ t, ftype: 'lowpass', freq: 700, d: 0.09, peak: 0.12 * v, out });
+          break;
+        case 'timpani':
+          this.synth({ t, f: 55, pitchFrom: 1.15, glide: 0.3, waves: [['sine', 0, 1]], d: 1.3, peak: 0.6 * v, out, wet: 0.4 });
+          this.synth({ t, f: 110, waves: [['sine', 0, 1]], d: 0.5, peak: 0.12 * v, out });
+          this.noise({ t, ftype: 'lowpass', freq: 320, d: 0.15, peak: 0.12 * v, out });
+          break;
+        case 'taikoBig':
+          this.synth({ t, f: 48, pitchFrom: 2, glide: 0.15, waves: [['sine', 0, 1]], d: 0.95, peak: 0.75 * v, out, wet: 0.45 });
+          this.noise({ t, ftype: 'lowpass', freq: 500, d: 0.2, peak: 0.22 * v, out });
           break;
         case 'woodblock':
           this.synth({ t, f: 880, pitchFrom: 1.1, glide: 0.02, waves: [['sine', 0, 1]], d: 0.06, peak: 0.2 * v, out, wet: 0.2 });
@@ -582,6 +609,14 @@
       this.applyTone(p.stageTarget);
     },
 
+    // 升級前的鋪陳（本關剩最後幾行）
+    setBuild(on) {
+      if (this.build === !!on) return;
+      this.build = !!on;
+      const p = this.current();
+      this.applyTone(p ? p.stageTarget : 0);
+    },
+
     // Combo 期間的即時加強（0 = 無）
     setBoost(n) {
       this.boost = n || 0;
@@ -591,14 +626,14 @@
 
     applyTone(stage, at) {
       if (!this.ctx) return;
-      const f = this.boost >= 2 ? 20000 : [2200, 3400, 5500, 9000, 15000, 20000][Math.max(0, Math.min(5, stage))];
+      const f = this.boost >= 2 || this.build ? 20000 : [2200, 3400, 5500, 9000, 15000, 20000][Math.max(0, Math.min(5, stage))];
       const t = Math.max(at || 0, this.ctx.currentTime);
       for (const node of [this.musicTone, this.wetTone]) {
         node.frequency.cancelScheduledValues(t);
         node.frequency.setTargetAtTime(f, t, 0.8);
       }
       const st = Math.max(0, Math.min(5, stage));
-      const g = [0.72, 0.8, 0.9, 1.0, 1.12, 1.25][st] * (this.boost >= 2 ? 1.08 : 1);
+      const g = [0.66, 0.76, 0.88, 1.0, 1.14, 1.3][st] * (this.boost >= 2 || this.build ? 1.08 : 1);
       this.stageGain.gain.cancelScheduledValues(t);
       this.stageGain.gain.setTargetAtTime(g, t, 0.8);
     },
@@ -681,13 +716,36 @@
       }
       if (song.rain && s16 === 0) this.noise({ t, ftype: 'bandpass', freq: 2600, q: 0.4, a: 0.6, d: p.stepDur * 17, peak: 0.045, out: p.outDrum, wet: 0.2 });
       if (song.gong && stage >= 3 && s16 === 0 && bar % 4 === 0) this.drum('gong', t, 1, p.outDrum);
+      // 史詩層：第 3 階起弦樂團 + 定音鼓 / 大太鼓，第 4 階起銅管重音
+      const eastern = song.epic === 'eastern';
+      const tri = chordMidis(song, deg, 0, 3);
+      if (stage >= 3 && s16 === 0) {
+        this.strings(t, tri.map((m) => m + 12).concat([tri[0]]), p.stepDur * 16, [0, 0, 0, 0.6, 0.85, 1.1][stage], out);
+      }
+      if (stage >= 3) {
+        const hit = eastern
+          ? s16 === 0 || (stage >= 4 && s16 === 8) || (stage >= 5 && s16 % 4 === 0)
+          : (s16 === 0 && (bar % 2 === 0 || stage >= 4)) || (stage >= 5 && s16 === 8);
+        if (hit) this.drum(eastern ? 'taikoBig' : 'timpani', t, s16 === 0 ? 1 : 0.7, p.outDrum);
+      }
+      if (stage >= 4 && !eastern && (s16 === 0 || (s16 === 14 && bar % 2 === 1))) {
+        this.brass(t, tri.map((m) => m + 12), p.stepDur * (s16 === 0 ? 3 : 2), stage >= 5 ? 1 : 0.7, out);
+      }
+      if (stage >= 5 && bar % 4 === 3 && s16 >= 12) this.drum(eastern ? 'tanggu' : 'tom', t, 0.6 + (s16 - 12) * 0.13, p.outDrum);
+      if (stage >= 5 && s16 % 8 === 0 && song.bassSeq[s16] !== '.') this.bassNote(t, degToMidi(song, deg, song.bassOct - 1), p.stepDur * 6, 'sub', out);
+      // 升級前的鋪陳：小鼓滾奏越來越密、升騰音
+      if (this.build) {
+        const dense = s16 >= 12 ? 1 : s16 >= 8 ? 2 : 4;
+        if (s16 % dense === 0) this.drum('snare', t, 0.3 + 0.7 * (s16 / 16), p.outDrum);
+        if (s16 === 0) this.riser(t, t + p.stepDur * 16);
+      }
       // 高潮層：16 分音符鼓點、每 4 小節一記鈸、大鼓推進
       if (hot && stage >= 2) {
         const hatOn = song.drums.hat && song.drums.hat[s16] !== '.';
         if (!hatOn) this.drum('hat', t, s16 % 4 === 2 ? 0.8 : 0.45, p.outDrum);
       }
       if (climax) {
-        if (s16 === 0 && bar % 4 === 0) this.drum('crash', t, 0.6, p.outDrum);
+        if (s16 === 0 && bar % 2 === 0) this.drum('crash', t, 0.6, p.outDrum);
         if (s16 % 4 === 0 && !song.drums.kick) this.drum('kick', t, 0.55, p.outDrum);
         if (s16 === 12 && bar % 2 === 1) this.drum('snare', t + p.stepDur * 2, 0.5, p.outDrum);
       }

@@ -384,6 +384,11 @@
         if (n === 0) break;
         Snd.play('clear', d);
         Snd.setStage(musicStage());
+        intensity = musicStage();
+        {
+          const lpl = game.settings.linesPerLevel;
+          Snd.setBuild(lpl - (game.lines % lpl) <= 2);
+        }
         Snd.setBoost(d.combo >= 2 ? d.combo : 0);
         levelStart.maxCombo = Math.max(levelStart.maxCombo, d.combo);
         const low = settings.fx === 'low';
@@ -442,6 +447,8 @@
       }
       case 'levelUp': {
         const idx = (d.level - 1) % THEMES.length;
+        Snd.setBuild(false);
+        intensity = musicStage();
         Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
         Snd.play('levelUp');
         if (settings.transitions && mode === 'playing') {
@@ -459,6 +466,7 @@
       case 'gameOver':
         Snd.stopMusic(2);
         Snd.setBoost(0);
+        Snd.setBuild(false);
         Snd.play('gameOver');
         mode = 'over'; overDelay = 1.1; overFade = 0; overShown = false;
         input.releaseAll();
@@ -483,6 +491,8 @@
     setTheme(idx);
     Snd.setMuffled(false);
     Snd.setBoost(0);
+    Snd.setBuild(false);
+    intensity = musicStage();
     Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
     showOverlay(null);
@@ -621,6 +631,7 @@
 
   // ================= 繪圖 =================
   let beat = 0;
+  let intensity = 0;
   function drawBackground(t) {
     const B = boardInfo();
     if (prevScene && sceneFade < 1) {
@@ -888,7 +899,7 @@
     const bi = Snd.beatInfo();
     beat = bi.playing ? Math.exp(-bi.phase * 5) * (bi.drums ? 1 : 0.55) : 0;
     updateTheme(dt);
-    if (scene) scene.update(dt);
+    if (scene) { if (scene.setIntensity) scene.setIntensity(game ? intensity : 1); scene.update(dt); }
     if (prevScene) prevScene.update(dt);
     updateFx(dt);
     render(ts);
