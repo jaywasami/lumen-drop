@@ -595,7 +595,7 @@
         break;
       }
       case 'levelUp': {
-        const idx = (d.level - 1) % THEMES.length;
+        const idx = themeFor(d.level);
         Snd.setBuild(false);
         intensity = musicStage();
         Snd.play('levelUp');
@@ -681,7 +681,7 @@
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
     fx.shards.length = 0; fx.waves.length = 0; fx.missiles.length = 0; fx.aberr = 0; fx.flash = 0; fx.impact = 0; fx.impactV = 0; fx.rowT = 1;
     fx.shake = 0; fx.pulse = 0; overFade = 0; overShown = false; lastWasHardDrop = false;
-    const idx = (lv - 1) % THEMES.length;
+    const idx = themeFor(lv);
     setTheme(idx);
     Snd.setMuffled(false);
     Snd.setBoost(0);
@@ -939,7 +939,16 @@
     if (delay > 5) setTimeout(() => { if (vs === my) startRound(r, seed); }, delay);
     else startRound(r, seed);
   }
+  // 對戰場景順序：每局用這局的種子洗牌，兩邊（同種子）看到同一套隨機順序
+  function shuffledThemes(seed) {
+    let a = (seed ^ 0x5bd1e995) >>> 0;
+    const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const order = THEMES.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    return order;
+  }
   function startRound(r, seed) {
+    vs.themeOrder = shuffledThemes(seed);
     Object.assign(vs, { round: r, seed, decided: false, banner: null, oppDead: false, localDead: false, quitOpen: false, lastRecv: performance.now(), lagging: false });
     vs.opp = { s: '', p: 0, l: 1, a: 0, n: 0 };
     startGame({ versus: true, seed });
@@ -1192,6 +1201,11 @@
     });
     const msg = b.over ? '比賽結束' : (b.t > 3.2 && vs.kind === 'net' && !vs.isHost ? '等待房主…' : '下一局即將開始');
     label(msg, cx, cy + cell * 5.6, cell * 0.5, 'rgba(220,228,255,0.85)', 'center', 600);
+  }
+
+  function themeFor(level) {
+    const i = (level - 1) % THEMES.length;
+    return vs && vs.themeOrder ? vs.themeOrder[i] : i;
   }
 
   // ================= 過關過場 =================
