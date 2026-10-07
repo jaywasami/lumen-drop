@@ -21,11 +21,12 @@
       const s = JSON.parse(localStorage.getItem('lumen.settings.v1') || '{}');
       const merged = Object.assign({}, JSON.parse(JSON.stringify(DEFAULTS)), s);
       merged.keys = Object.assign({}, DEFAULTS.keys, s.keys || {});
+      merged.startLevel = 1; // 起始等級只在本次開啟有效，避免下次還停在高等級
       return merged;
     } catch (_) { return JSON.parse(JSON.stringify(DEFAULTS)); }
   }
   function saveSettings() {
-    try { localStorage.setItem('lumen.settings.v1', JSON.stringify(settings)); } catch (_) { /* ignore */ }
+    try { localStorage.setItem('lumen.settings.v1', JSON.stringify(Object.assign({}, settings, { startLevel: 1 }))); } catch (_) { /* ignore */ }
   }
   function getBest() { try { return +localStorage.getItem('lumen.best') || 0; } catch (_) { return 0; } }
   function setBest(v) { try { localStorage.setItem('lumen.best', String(v)); } catch (_) { /* ignore */ } }
@@ -53,7 +54,7 @@
   let resumeMode = 'playing';
   let tr = null; // 過關過場
   let levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
-  const DIFFICULTY = { relaxed: { linesPerLevel: 12, gravityScale: 0.55 }, normal: { linesPerLevel: 10, gravityScale: 0.8 }, classic: { linesPerLevel: 10, gravityScale: 1 } };
+  const DIFFICULTY = { relaxed: { linesPerLevel: 12, gravityScale: 0.55, reward: 0.6 }, normal: { linesPerLevel: 10, gravityScale: 0.8, reward: 0.7 }, classic: { linesPerLevel: 10, gravityScale: 1, reward: 0.85 } };
   let game = null;
   let countdown = 0;
   let lastCount = 4;
@@ -314,27 +315,37 @@
   }
   // ================= 自訂按鍵位置 =================
   const padButtons = () => Array.from(touchEl.querySelectorAll('.b'));
+  // customPad 儲存「未乘整體倍率」的左上角與寬高（占視窗比例）；實際顯示再乘上 btnScale，以中心縮放
+  const bsNow = () => Math.max(0.7, Math.min(1.4, +settings.btnScale || 1));
   function applyCustomPad() {
     const cp = settings.customPad;
     touchEl.classList.toggle('custom', !!cp);
+    const bs = bsNow();
     for (const b of padButtons()) {
       const r = cp && cp[b.dataset.action];
-      if (cp && r) {
-        b.style.left = `${r.x * vw}px`; b.style.top = `${r.y * vh}px`;
-        b.style.width = `${r.w * vw}px`; b.style.height = `${r.h * vh}px`;
-      } else if (cp) {
-        b.style.left = `${vw * 0.42}px`; b.style.top = `${vh * 0.8}px`; b.style.width = '64px'; b.style.height = '56px';
+      if (cp) {
+        const q = r || { x: 0.42, y: 0.8, w: 64 / vw, h: 56 / vh };
+        const w0 = q.w * vw, h0 = q.h * vh, w = w0 * bs, h = h0 * bs;
+        const cx = q.x * vw + w0 / 2, cy = q.y * vh + h0 / 2;
+        b.style.left = `${Math.max(0, Math.min(vw - w, cx - w / 2))}px`; b.style.top = `${Math.max(0, Math.min(vh - h, cy - h / 2))}px`;
+        b.style.width = `${w}px`; b.style.height = `${h}px`;
       } else {
         b.style.left = b.style.top = b.style.width = b.style.height = '';
       }
     }
+  }
+  function rectToStore(r) {
+    const bs = bsNow();
+    const w0 = r.width / bs, h0 = r.height / bs;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    return { x: (cx - w0 / 2) / vw, y: (cy - h0 / 2) / vh, w: w0 / vw, h: h0 / vh };
   }
   function capturePad() {
     const cp = {};
     for (const b of padButtons()) {
       const r = b.getBoundingClientRect();
       if (r.width === 0) continue;
-      cp[b.dataset.action] = { x: r.left / vw, y: r.top / vh, w: r.width / vw, h: r.height / vh };
+      cp[b.dataset.action] = rectToStore(r);
     }
     return cp;
   }
@@ -349,6 +360,7 @@
     touchEl.classList.add('editing');
     input.editing = true;
     $('pad-editor').classList.remove('hidden');
+    selectBtn(padButtons().find((b) => b.dataset.action === 'cw') || padButtons()[0]);
   }
   function closePadEditor() {
     if (editSel) editSel.classList.remove('sel');
@@ -363,16 +375,39 @@
     settingsReturn = editReturn || 'menu';
   }
   function storeBtn(b) {
-    const r = b.getBoundingClientRect();
-    settings.customPad[b.dataset.action] = { x: r.left / vw, y: r.top / vh, w: r.width / vw, h: r.height / vh };
+    settings.customPad[b.dataset.action] = rectToStore(b.getBoundingClientRect());
+  }
+  function selectBtn(b) {
+    if (editSel) editSel.classList.remove('sel');
+    editSel = b;
+    if (b) { b.classList.add('sel'); syncSizeSliders(); }
+    $('pe-sel').textContent = b ? `已選：${b.getAttribute('aria-label') || b.dataset.action}` : '先點選一顆按鍵';
+  }
+  function syncSizeSliders() {
+    if (!editSel) return;
+    const r = editSel.getBoundingClientRect();
+    $('pe-w').value = Math.round(r.width); $('pe-h').value = Math.round(r.height);
+    $('pe-w-v').textContent = `${Math.round(r.width)}px`; $('pe-h-v').textContent = `${Math.round(r.height)}px`;
+    $('pe-all').value = Math.round(bsNow() * 100); $('pe-all-v').textContent = `${Math.round(bsNow() * 100)}%`;
+  }
+  function setSelSize(w, hgt) {
+    if (!editSel) return;
+    const r = editSel.getBoundingClientRect();
+    w = w == null ? r.width : Math.max(36, Math.min(vw * 0.9, w));
+    hgt = hgt == null ? r.height : Math.max(32, Math.min(vh * 0.5, hgt));
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    editSel.style.width = `${w}px`; editSel.style.height = `${hgt}px`;
+    editSel.style.left = `${Math.max(0, Math.min(vw - w, cx - w / 2))}px`;
+    editSel.style.top = `${Math.max(0, Math.min(vh - hgt, cy - hgt / 2))}px`;
+    storeBtn(editSel);
+    syncSizeSliders();
   }
   for (const b of padButtons()) {
     let drag = null;
     b.addEventListener('pointerdown', (e) => {
       if (!input.editing) return;
       e.preventDefault();
-      if (editSel) editSel.classList.remove('sel');
-      editSel = b; b.classList.add('sel');
+      selectBtn(b);
       const r = b.getBoundingClientRect();
       drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
       try { b.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
@@ -384,19 +419,14 @@
       const y = Math.max(0, Math.min(vh - r.height, e.clientY - drag.dy));
       b.style.left = `${x}px`; b.style.top = `${y}px`;
     });
-    const end = (e) => { if (!input.editing || !drag || drag.id !== e.pointerId) return; drag = null; storeBtn(b); };
+    const end = (e) => { if (!input.editing || !drag || drag.id !== e.pointerId) return; drag = null; storeBtn(b); syncSizeSliders(); };
     b.addEventListener('pointerup', end);
     b.addEventListener('pointercancel', end);
   }
   function resizeSel(k) {
     if (!editSel) return;
     const r = editSel.getBoundingClientRect();
-    const w = Math.max(40, Math.min(vw * 0.6, r.width * k)), hgt = Math.max(36, Math.min(vh * 0.3, r.height * k));
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    editSel.style.width = `${w}px`; editSel.style.height = `${hgt}px`;
-    editSel.style.left = `${Math.max(0, Math.min(vw - w, cx - w / 2))}px`;
-    editSel.style.top = `${Math.max(0, Math.min(vh - hgt, cy - hgt / 2))}px`;
-    storeBtn(editSel);
+    setSelSize(r.width * k, r.height * k);
   }
 
   function boardInfo() { return { x: bx, y: by, w: cell * 10, h: cell * VIS, c: cell, cx: bx + cell * 5, cy: by + cell * 10 }; }
@@ -562,7 +592,7 @@
         }
         Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
         setTheme(idx);
-        popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
+        popup([`LEVEL ${d.level}`, '過關獎勵：速度放慢'], '#8be9ff');
         fx.rings.push({ t: 0, life: 1.1 });
         fx.pulse = 1;
         fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.2, s: 1.2 });
@@ -587,7 +617,7 @@
     input.releaseAll();
     const lv = Math.max(1, Math.min(15, settings.startLevel | 0));
     const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
-    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale }, onEvent: onGameEvent });
+    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale, reward: diff.reward }, onEvent: onGameEvent });
     levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
     tr = null;
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
@@ -680,6 +710,7 @@
       mode = 'playing';
       levelStart = { time: game.time, score: game.score, lines: game.lines, maxCombo: 0 };
       tr = null;
+      popup(['BONUS TIME', '過關獎勵：速度放慢'], '#8be9ff');
     }
   }
   const SERIF = '"Noto Serif TC", "Songti TC", "Source Han Serif TC", "PMingLiU", serif';
@@ -1217,7 +1248,7 @@
       }
       row.append(lab, seg); body.append(row);
     }
-    mkSlider('按鍵大小', 'btnScale', 0.7, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`);
+    mkSlider('按鍵整體大小', 'btnScale', 0.7, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSlider('起始等級', 'startLevel', 1, THEMES.length, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
@@ -1274,6 +1305,13 @@
   $('pe-reset').addEventListener('click', () => {
     settings.customPad = null; applyCustomPad();
     settings.customPad = capturePad(); applyCustomPad();
+    syncSizeSliders();
+  });
+  $('pe-w').addEventListener('input', (e) => setSelSize(+e.target.value, null));
+  $('pe-h').addEventListener('input', (e) => setSelSize(null, +e.target.value));
+  $('pe-all').addEventListener('input', (e) => {
+    settings.btnScale = +e.target.value / 100;
+    layout(); applyCustomPad(); syncSizeSliders();
   });
   $('pe-done').addEventListener('click', () => { Snd.play('ui'); closePadEditor(); });
   $('btn-start').addEventListener('click', ui(startGame));

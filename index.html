@@ -34,7 +34,10 @@
 
 <!-- 自訂按鍵位置 -->
 <div id="pad-editor" class="hidden">
-  <div class="pe-hint">拖曳按鍵到想要的位置，點選後可調整大小</div>
+  <div class="pe-hint">拖曳按鍵移動位置　<b id="pe-sel">先點選一顆按鍵</b></div>
+  <div class="pe-sl"><label>寬度 <span id="pe-w-v">0</span></label><input id="pe-w" type="range" min="36" max="300" step="2"></div>
+  <div class="pe-sl"><label>高度 <span id="pe-h-v">0</span></label><input id="pe-h" type="range" min="32" max="260" step="2"></div>
+  <div class="pe-sl"><label>全部按鍵大小 <span id="pe-all-v">100%</span></label><input id="pe-all" type="range" min="70" max="140" step="5"></div>
   <div class="pe-row">
     <button id="pe-smaller">縮小</button>
     <button id="pe-bigger">放大</button>

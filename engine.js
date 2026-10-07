@@ -82,6 +82,7 @@
     startLevel: 1,
     linesPerLevel: 10,
     gravityScale: 1, // 等級對速度的影響倍率（< 1 = 加速較慢）
+    reward: 1, // 過關獎勵：升級後該關起始速度倍率（< 1 = 先放慢，隨消行逐漸加回 1）
   };
 
   function gravityCps(level) {
@@ -135,6 +136,14 @@
         }
         this.queue.push(...bag);
       }
+    }
+
+    // 過關獎勵：每升一級（第一關除外），新的一關從 reward 倍速度開始，隨本關消行數線性加回 1 倍
+    rewardMul() {
+      const s = this.settings;
+      if (this.level <= s.startLevel || s.reward >= 1) return 1;
+      const progress = (this.lines % s.linesPerLevel) / s.linesPerLevel;
+      return s.reward + (1 - s.reward) * progress;
     }
 
     next(n = 5) {
@@ -447,7 +456,7 @@
       }
 
       // 重力
-      let cps = gravityCps(1 + (this.level - 1) * s.gravityScale);
+      let cps = gravityCps(1 + (this.level - 1) * s.gravityScale) * this.rewardMul();
       const soft = this.held.softDrop;
       if (soft) cps = s.sdf >= 40 ? Infinity : cps * s.sdf;
       if (cps === Infinity) {

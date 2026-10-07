@@ -304,4 +304,32 @@ test('升級：每 10 行 +1 等級', () => {
   assert.equal(g.level, 2);
 });
 
+test('第一關速度 = 每秒 1 格，不受獎勵影響', () => {
+  const g = new Game({ seed: 3, settings: { reward: 0.6, gravityScale: 0.55 } });
+  assert.equal(g.rewardMul(), 1);
+  const y0 = g.cur.y;
+  g.update(1000);
+  assert.equal(g.cur.y - y0, 1);
+});
+
+test('過關獎勵：升級後速度放慢，隨消行逐漸加回', () => {
+  const g = new Game({ seed: 3, settings: { reward: 0.6, linesPerLevel: 10 } });
+  g.lines = 10; g.level = 2; // 剛升到第 2 關
+  assert.ok(Math.abs(g.rewardMul() - 0.6) < 1e-9);
+  g.lines = 15;
+  assert.ok(Math.abs(g.rewardMul() - 0.8) < 1e-9);
+  g.lines = 19;
+  assert.ok(g.rewardMul() > 0.95 && g.rewardMul() < 1);
+  // 新關起點比上一關終點慢
+  const E = require('../engine.js');
+  const endOfL1 = E.gravityCps(1);
+  const startOfL2 = E.gravityCps(2) * 0.6;
+  assert.ok(startOfL2 < E.gravityCps(2) && startOfL2 < endOfL1 * 1.0 + 0.0001 + 0.0, `start ${startOfL2} end ${endOfL1}`);
+});
+
+test('起始等級 > 1 時，第一關沒有獎勵', () => {
+  const g = new Game({ seed: 3, settings: { reward: 0.6, startLevel: 5 } });
+  assert.equal(g.rewardMul(), 1);
+});
+
 console.log(`\n${passed} passed`);
