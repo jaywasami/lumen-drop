@@ -69,7 +69,7 @@
 
     releaseAll() {
       for (const a of Object.keys(this.sources)) this.sources[a].clear();
-      document.querySelectorAll('#touch .b.active').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('#touch .b.active, #touch .b.armed').forEach((b) => { b.classList.remove('active', 'armed'); b._armed = null; });
       this.gesturePointers.clear();
       const g = this.getGame();
       if (g) g.releaseAll();
@@ -102,19 +102,42 @@
       // 螢幕按鍵
       document.querySelectorAll('#touch .b').forEach((btn) => {
         const action = btn.dataset.action;
+        // 硬降防誤觸：預設放開才落下，手指滑出按鈕即取消
+        const confirmDrop = () => action === 'hardDrop' && this.settings.hdMode !== 'press';
         btn.addEventListener('pointerdown', (e) => {
           e.preventDefault();
           try { btn.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+          if (confirmDrop()) {
+            if (!this.getGame()) return;
+            btn.classList.add('armed');
+            btn._armed = e.pointerId;
+            if (this.settings.haptics && navigator.vibrate) navigator.vibrate(4);
+            return;
+          }
           btn.classList.add('active');
           this.press(action, 'p:' + e.pointerId);
         });
+        btn.addEventListener('pointermove', (e) => {
+          if (btn._armed !== e.pointerId) return;
+          const r = btn.getBoundingClientRect();
+          const m = 6;
+          const inside = e.clientX >= r.left - m && e.clientX <= r.right + m && e.clientY >= r.top - m && e.clientY <= r.bottom + m;
+          btn.classList.toggle('armed', inside);
+        });
         const up = (e) => {
           btn.classList.remove('active');
+          if (btn._armed === e.pointerId) {
+            const fire = e.type === 'pointerup' && btn.classList.contains('armed');
+            btn._armed = null;
+            btn.classList.remove('armed');
+            if (fire) this.press('hardDrop', 'p:' + e.pointerId);
+            return;
+          }
           this.release(action, 'p:' + e.pointerId);
         };
         btn.addEventListener('pointerup', up);
         btn.addEventListener('pointercancel', up);
-        btn.addEventListener('lostpointercapture', up);
+        btn.addEventListener('lostpointercapture', (e) => { if (btn._armed === e.pointerId) { btn._armed = null; btn.classList.remove('armed'); } else up(e); });
         btn.addEventListener('contextmenu', (e) => e.preventDefault());
       });
 
@@ -163,7 +186,7 @@
         const speed = Math.abs(dy) / Math.max(dt, 1);
         if (!p.moved && dt < 300) {
           this.press(e.clientX > window.innerWidth / 2 ? 'cw' : 'ccw', 'g');
-        } else if (dy > this.cellPx * 2.5 && dt < 280 && speed > 0.55 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+        } else if (dy > this.cellPx * 3.5 && dt < 260 && speed > 0.9 && Math.abs(dy) > Math.abs(dx) * 2) {
           this.press('hardDrop', 'g');
         } else if (dy < -this.cellPx * 2 && dt < 320 && Math.abs(dy) > Math.abs(dx) * 1.5) {
           this.press('hold', 'g');

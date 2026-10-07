@@ -35,7 +35,7 @@ jobs:
       - name: Stage site files
         run: |
           mkdir _site
-          cp index.html style.css engine.js audio.js scenes.js input.js main.js sw.js icon.svg manifest.webmanifest _site/
+          cp index.html style.css engine.js audio.js scenes.js post.js input.js main.js sw.js icon.svg manifest.webmanifest _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

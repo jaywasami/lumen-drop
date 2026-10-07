@@ -12,7 +12,7 @@
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -35,6 +35,13 @@
   const canvas = $('c');
   const ctx = canvas.getContext('2d');
   const touchEl = $('touch');
+  const glCanvas = $('gl');
+  let post = null;
+  function setupPost() {
+    if (settings.fx === 'low') post = null;
+    else if (!post) post = window.LumenPost && window.LumenPost.create(glCanvas);
+    document.body.classList.toggle('post-on', !!post);
+  }
   const pauseBtn = $('btn-pause');
   const overlays = ['menu', 'pause', 'gameover', 'help', 'settings'].reduce((o, k) => (o[k] = $(k), o), {});
   function showOverlay(name) {
@@ -244,12 +251,13 @@
     pauseBtn.style.height = `${cell * 1.7}px`;
     pauseBtn.style.fontSize = `${Math.max(11, cell * 0.55)}px`;
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
+    touchEl.classList.toggle('show180', !!settings.show180);
     if (pw !== vw || ph !== vh) for (const s of scenes) if (s) s.resize(vw, vh);
   }
   function boardInfo() { return { x: bx, y: by, w: cell * 10, h: cell * VIS, c: cell, cx: bx + cell * 5, cy: by + cell * 10 }; }
 
   // ================= 特效 =================
-  const fx = { particles: [], flashes: [], rings: [], streaks: [], popups: [], lockFlash: [], shake: 0, pulse: 0 };
+  const fx = { particles: [], flashes: [], rings: [], streaks: [], popups: [], lockFlash: [], shards: [], waves: [], shake: 0, pulse: 0, aberr: 0, flash: 0, impact: 0, impactV: 0, rowOff: null, rowT: 1 };
   const maxParticles = () => (settings.fx === 'low' ? 140 : 480);
   function addParticle(p) { if (fx.particles.length < maxParticles()) fx.particles.push(p); }
   function burst(x, y, color, n, speed, life, gravity) {
@@ -272,6 +280,19 @@
     }
     fx.shake *= Math.pow(0.0008, s);
     fx.pulse *= Math.pow(0.05, s);
+    fx.aberr *= Math.pow(0.02, s);
+    fx.flash *= Math.pow(0.004, s);
+    // 撞擊彈簧（場地被硬降撞得往下沉再彈回）
+    const k = 520, damp = 22;
+    fx.impactV += (-k * fx.impact - damp * fx.impactV) * s;
+    fx.impact += fx.impactV * s;
+    if (fx.rowT < 1) fx.rowT = Math.min(1, fx.rowT + s / 0.2);
+    for (let i = fx.shards.length - 1; i >= 0; i--) {
+      const p = fx.shards[i];
+      p.life -= s; if (p.life <= 0) { fx.shards.splice(i, 1); continue; }
+      p.vy += cell * 30 * s; p.x += p.vx * s; p.y += p.vy * s; p.rot += p.vr * s;
+    }
+    for (let i = fx.waves.length - 1; i >= 0; i--) { fx.waves[i].t += s; if (fx.waves[i].t >= fx.waves[i].life) fx.waves.splice(i, 1); }
     if (mode === 'over') overFade = Math.min(1, overFade + s * 1.2);
   }
 
@@ -298,11 +319,13 @@
           const [px, py] = cellPos(x, y + 1);
           burst(px + cell / 2, py, COLORS[d.type], settings.fx === 'low' ? 3 : 7, cell * 6, 0.45, cell * 14);
         }
-        fx.shake = Math.max(fx.shake, Math.min(2 + d.dist * 0.35, 9));
+        fx.shake = Math.max(fx.shake, Math.min(1 + d.dist * 0.2, 5));
+        fx.impactV += Math.min(30 + d.dist * 8, 200);
+        fx.aberr = Math.max(fx.aberr, Math.min(0.15 + d.dist * 0.03, 0.6));
         break;
       }
       case 'lock': {
-        if (!lastWasHardDrop) Snd.play('lock');
+        if (!lastWasHardDrop) { Snd.play('lock'); fx.impactV += 18; }
         lastWasHardDrop = false;
         fx.lockFlash.push({ cells: d.cells, t: 0, life: 0.16 });
         if (d.tspin && d.lines === 0) { Snd.play('tspinNoLines'); popup(['T-SPIN' + (d.mini ? ' MINI' : '')], '#d9a8ff'); }
@@ -313,14 +336,44 @@
         if (n === 0) break;
         Snd.play('clear', d);
         Snd.setStage(musicStage());
+        const low = settings.fx === 'low';
+        const cxB = bx + cell * 5;
         for (const row of d.rows) {
           fx.flashes.push({ y: row.y, t: 0, life: 0.42 });
           for (let x = 0; x < W; x++) {
             const t = ID_TYPE[row.row[x]];
             if (!t) continue;
             const [px, py] = cellPos(x, row.y);
-            burst(px + cell / 2, py + cell / 2, COLORS[t], settings.fx === 'low' ? 1 : 3, cell * (n >= 4 ? 14 : 8), 0.7, cell * 8);
+            burst(px + cell / 2, py + cell / 2, COLORS[t], low ? 1 : 3, cell * (n >= 4 ? 14 : 8), 0.7, cell * 8);
+            // 方塊碎片：整格方塊旋轉著飛散
+            if (!low || x % 2 === 0) {
+              const dir = (px + cell / 2 - cxB) / (cell * 5);
+              const power = n >= 4 ? 1.6 : 1;
+              fx.shards.push({
+                type: t, x: px + cell / 2, y: py + cell / 2,
+                vx: (dir * 9 + (Math.random() - 0.5) * 6) * cell * power,
+                vy: -(6 + Math.random() * 8) * cell * power,
+                rot: 0, vr: (Math.random() - 0.5) * 14, s: 0.55 + Math.random() * 0.35, life: 0.9, max: 0.9,
+              });
+            }
           }
+        }
+        // 上方方塊往下掉的動畫
+        const cleared = d.rows.map((r) => r.y).sort((a, b) => b - a);
+        const off = new Float32Array(H);
+        let cnt = 0, ci = 0;
+        for (let oy = H - 1; oy >= 0; oy--) {
+          if (ci < cleared.length && cleared[ci] === oy) { cnt++; ci++; continue; }
+          if (oy + cnt < H) off[oy + cnt] = -cnt;
+        }
+        fx.rowOff = off; fx.rowT = 0;
+        const midY = (d.rows.reduce((a, r) => a + r.y, 0) / d.rows.length - HIDDEN + 0.5) * cell + by;
+        if (n >= 4 || d.tspin || d.pc) {
+          fx.waves.push({ x: cxB / vw, y: midY / vh, t: 0, life: 0.85, s: n >= 4 ? 1 : 0.7 });
+          fx.aberr = Math.max(fx.aberr, 1.2);
+          fx.flash = Math.max(fx.flash, 0.22);
+        } else if (n >= 2) {
+          fx.waves.push({ x: cxB / vw, y: midY / vh, t: 0, life: 0.6, s: 0.35 });
         }
         if (scene) scene.burst(Object.assign({}, d, { rows: d.rows.map((r) => ({ vy: r.y - HIDDEN })) }), boardInfo());
         const names = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS'];
@@ -347,6 +400,8 @@
         popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
         fx.rings.push({ t: 0, life: 1.1 });
         fx.pulse = 1;
+        fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.2, s: 1.2 });
+        fx.flash = Math.max(fx.flash, 0.35);
         break;
       }
       case 'gameOver':
@@ -366,6 +421,7 @@
     const lv = Math.max(1, Math.min(15, settings.startLevel | 0));
     game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv }, onEvent: onGameEvent });
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
+    fx.shards.length = 0; fx.waves.length = 0; fx.aberr = 0; fx.flash = 0; fx.impact = 0; fx.impactV = 0; fx.rowT = 1;
     fx.shake = 0; fx.pulse = 0; overFade = 0; overShown = false; lastWasHardDrop = false;
     const idx = (lv - 1) % THEMES.length;
     setTheme(idx);
@@ -456,11 +512,14 @@
 
   function drawBoard() {
     const b = game.board;
+    const anim = fx.rowT < 1 && fx.rowOff;
+    const ease = anim ? 1 - fx.rowT * fx.rowT : 0;
     for (let y = HIDDEN; y < H; y++) {
       const row = b[y];
+      const dy = anim ? fx.rowOff[y] * ease : 0;
       for (let x = 0; x < W; x++) {
         const id = row[x];
-        if (id) drawCell(ID_TYPE[id], bx + x * cell, by + (y - HIDDEN) * cell, cell);
+        if (id) drawCell(ID_TYPE[id], bx + x * cell, by + (y - HIDDEN + dy) * cell, cell);
       }
     }
   }
@@ -588,6 +647,14 @@
       g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     g.globalCompositeOperation = 'source-over';
+    for (const p of fx.shards) {
+      const a = Math.min(1, p.life / p.max * 1.6);
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      const sz = cell * p.s;
+      drawCell(p.type, -sz / 2, -sz / 2, sz, a);
+      ctx.restore();
+    }
     for (const pop of fx.popups) {
       const k = pop.t / pop.life;
       const a = k < 0.12 ? k / 0.12 : Math.max(0, 1 - (k - 0.55) / 0.45);
@@ -624,13 +691,16 @@
     if (!game) return;
     ctx.save();
     if (fx.shake > 0.3) ctx.translate((Math.random() - 0.5) * fx.shake, (Math.random() - 0.5) * fx.shake);
+    ctx.save();
+    ctx.translate(0, Math.max(-cell * 0.25, Math.min(cell * 0.45, fx.impact)));
     drawWell();
     ctx.save();
     ctx.beginPath(); ctx.rect(bx - 2, by - cell * 1.5, cell * 10 + 4, cell * VIS + cell * 1.5 + 4); ctx.clip();
     drawBoard();
     if (mode !== 'countdown') drawPiece();
-    drawEffects();
     ctx.restore();
+    ctx.restore();
+    drawEffects();
     drawHud();
     if (mode === 'countdown') drawCountdown();
     if (mode === 'over') {
@@ -642,6 +712,7 @@
 
   // ================= 主迴圈 =================
   let last = performance.now();
+  let perfAcc = 0, perfN = 0;
   function frame(ts) {
     requestAnimationFrame(frame);
     const dt = Math.min(50, ts - last); last = ts;
@@ -662,6 +733,28 @@
     if (prevScene) prevScene.update(dt);
     updateFx(dt);
     render(ts);
+    // 效能保護：遊玩中連續 3 秒平均低於約 40fps，就自動關閉光暈後製
+    if (post && mode === 'playing' && !window.__noPerfGuard) {
+      perfAcc += dt; perfN++;
+      if (perfAcc >= 3000) {
+        if (perfAcc / perfN > 25) { post = null; document.body.classList.remove('post-on'); popup(['已切換省電顯示'], '#8be9ff'); }
+        perfAcc = 0; perfN = 0;
+      }
+    }
+    if (post) {
+      const ok = post.render(canvas, {
+        bloom: 0.45 + beat * 0.25 + fx.pulse * 0.45,
+        thr: 0.68,
+        aberr: fx.aberr,
+        vig: 0.45,
+        flash: fx.flash,
+        waves: fx.waves.slice(-3).map((w) => {
+          const k = w.t / w.life;
+          return { x: w.x, y: w.y, r: k * 1.1, s: w.s * (1 - k) };
+        }),
+      });
+      if (!ok) { post = null; document.body.classList.remove('post-on'); }
+    }
   }
 
   // ================= 設定介面 =================
@@ -704,9 +797,11 @@
     mkSlider('音效音量', 'sfx', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSlider('起始等級', 'startLevel', 1, 15, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
+    mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
+    mkSeg('顯示 180° 按鈕', 'show180', [[false, '隱藏'], [true, '顯示']]);
     mkSeg('震動回饋', 'haptics', [[true, '開'], [false, '關']]);
     mkSeg('落點提示', 'ghost', [[true, '開'], [false, '關']]);
-    mkSeg('特效品質', 'fx', [['high', '高'], ['low', '省電']]);
+    mkSeg('特效品質', 'fx', [['high', '高（光暈）'], ['low', '省電']]);
 
     const h = document.createElement('h3'); h.textContent = '鍵盤按鍵（點擊後按新按鍵）'; h.style.textAlign = 'left';
     body.append(h);
@@ -745,7 +840,7 @@
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
     if (game && mode !== 'menu') touchEl.classList.toggle('hidden', settings.controls === 'off' || mode === 'over');
     layout();
-    if (fxChanged) rebuildScenes();
+    if (fxChanged) { rebuildScenes(); setupPost(); }
   }
 
   // ================= 事件綁定 =================
@@ -796,6 +891,7 @@
   Snd.musicVol = settings.music;
   Snd.sfxVol = settings.sfx;
   $('best-score').textContent = getBest().toLocaleString();
+  setupPost();
   layout();
   setTheme(0, true);
   requestAnimationFrame((ts) => { last = ts; frame(ts); });
@@ -803,6 +899,6 @@
   // 供自動測試使用
   window.__lumen = {
     get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings,
-    setTheme: (i) => { setTheme(i, true); }, get themeIdx() { return themeIdx; },
+    setTheme: (i) => { setTheme(i, true); }, get themeIdx() { return themeIdx; }, get post() { return post; },
   };
 })();
