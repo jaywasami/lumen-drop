@@ -99,13 +99,16 @@
     { name: '竹林', accent: [150, 225, 140], style: 'porcelain', sub: '風過竹林，一葉知秋', light: true },
     { name: '極光', accent: [109, 255, 176], style: 'glass', sub: '夜空在呼吸' },
     { name: '水墨', accent: [214, 72, 58], style: 'porcelain', sub: '山色有無中', light: true },
+    { name: '荷塘月色', accent: [255, 170, 205], style: 'jade', sub: '荷塘月色，曲曲折折' },
     { name: '螢火森林', accent: [200, 255, 120], style: 'glass', sub: '森林在夜裡發光' },
     { name: '霓虹都市', accent: [255, 93, 230], style: 'neon', sub: '午夜的城市不睡' },
     { name: '敦煌', accent: [240, 180, 90], style: 'gold', sub: '飛天的彩帶穿過千年' },
     { name: '櫻花', accent: [255, 166, 216], style: 'soft', sub: '花落知多少' },
+    { name: '長城', accent: [255, 190, 130], style: 'gold', sub: '萬里長城今猶在' },
     { name: '冰晶洞窟', accent: [150, 230, 255], style: 'glass', sub: '光在冰裡迷了路' },
     { name: '燈節', accent: [255, 170, 60], style: 'gold', sub: '東風夜放花千樹' },
     { name: '雨夜', accent: [120, 180, 255], style: 'neon', sub: '霓虹在雨裡暈開' },
+    { name: '仙山', accent: [150, 220, 210], style: 'porcelain', sub: '雲深不知處', light: true },
     { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
   ];
@@ -203,6 +206,17 @@
       g.fillStyle = gr; rr(g, x, y, s, s, c * 0.16); g.fill();
       g.strokeStyle = 'rgba(20,20,30,0.75)'; g.lineWidth = Math.max(1.2, c * 0.06);
       rr(g, x + 0.5, y + 0.5, s - 1, s - 1, c * 0.16); g.stroke();
+    } else if (style === 'jade') {
+      const jc = mix(col, [170, 230, 200], 0.18);
+      g.shadowColor = rgb(jc, 0.7); g.shadowBlur = c * 0.35;
+      const gr0 = g.createLinearGradient(x, y, x + s, y + s);
+      gr0.addColorStop(0, rgb(mix(jc, [255, 255, 255], 0.45))); gr0.addColorStop(0.5, rgb(jc)); gr0.addColorStop(1, rgb(mix(jc, [10, 40, 30], 0.45)));
+      g.fillStyle = gr0; rr(g, x, y, s, s, c * 0.24); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.beginPath(); g.ellipse(x + s * 0.5, y + s * 0.5, s * 0.32, s * 0.2, -0.6, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = Math.max(1, c * 0.05);
+      rr(g, x + 1, y + 1, s - 2, s - 2, c * 0.22); g.stroke();
     } else if (style === 'soft') {
       const pc = mix(col, [255, 240, 248], 0.38);
       g.shadowColor = rgb(pc, 0.8); g.shadowBlur = c * 0.35;

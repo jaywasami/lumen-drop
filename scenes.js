@@ -30,6 +30,42 @@
     g.fillRect(x - r, y - r, r * 2, r * 2);
   }
 
+  // 柔光點：中心亮、往外淡出
+  function softDot(color) {
+    const S = layer(32, 32);
+    const gr = S.g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.2, `rgba(${color},0.9)`); gr.addColorStop(0.5, `rgba(${color},0.3)`); gr.addColorStop(1, `rgba(${color},0)`);
+    S.g.fillStyle = gr; S.g.fillRect(0, 0, 32, 32);
+    return S;
+  }
+  // 梅花：五瓣、花心有黃色花蕊
+  function plumSprite() {
+    const S = layer(40, 40);
+    const g = S.g;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * TAU - Math.PI / 2;
+      const px = 20 + Math.cos(a) * 8, py = 20 + Math.sin(a) * 8;
+      const gr = g.createRadialGradient(px, py, 0, px, py, 9);
+      gr.addColorStop(0, '#f6a0a8'); gr.addColorStop(0.6, '#d8313f'); gr.addColorStop(1, '#a3121f');
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(px, py, 8.5, 0, TAU); g.fill();
+    }
+    g.fillStyle = '#7a0d16'; g.beginPath(); g.arc(20, 20, 4, 0, TAU); g.fill();
+    g.strokeStyle = '#f2c84b'; g.lineWidth = 0.8;
+    for (let i = 0; i < 9; i++) { const a = (i / 9) * TAU; g.beginPath(); g.moveTo(20, 20); g.lineTo(20 + Math.cos(a) * 7, 20 + Math.sin(a) * 7); g.stroke(); }
+    g.fillStyle = '#ffe07a';
+    for (let i = 0; i < 9; i++) { const a = (i / 9) * TAU; g.beginPath(); g.arc(20 + Math.cos(a) * 7, 20 + Math.sin(a) * 7, 1, 0, TAU); g.fill(); }
+    return S;
+  }
+  function petalSprite(c1, c2) {
+    const S = layer(20, 14);
+    const gr = S.g.createLinearGradient(0, 0, 20, 14);
+    gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+    S.g.fillStyle = gr;
+    S.g.beginPath(); S.g.ellipse(10, 7, 9, 6, 0, 0, TAU); S.g.fill();
+    return S;
+  }
+
   // 鏡頭失焦光斑：中心柔、邊緣一圈略亮
   function bokehSprite(color) {
     const S = layer(64, 64);
@@ -346,7 +382,7 @@
       this.bubbles = [];
       for (let i = 0; i < (this.low ? 12 : 30); i++) this.bubbles.push(this.newBubble(true));
       this.snow = [];
-      for (let i = 0; i < (this.low ? 30 : 80); i++) this.snow.push({ x: rand(0, w), y: rand(0, h), v: rand(4, 14), s: rand(0.6, 1.8), ph: rand(0, TAU) });
+      for (let i = 0; i < (this.low ? 30 : 80); i++) this.snow.push({ x: rand(0, w), y: rand(0, h), v: rand(4, 14), s: rand(1, 2.6), ph: rand(0, TAU) });
     }
     newBubble(anywhere, x, y) {
       return { x: x != null ? x : rand(0, this.w), y: y != null ? y : anywhere ? rand(0, this.h) : this.h + 10, r: rand(1.5, 4.5), v: rand(25, 70), ph: rand(0, TAU), temp: x != null };
@@ -944,10 +980,19 @@
         g.drawImage(c.L.cv, x, c.y - h * 0.2, w * 2, h * 0.4);
         g.drawImage(c.L.cv, x + w * 2, c.y - h * 0.2, w * 2, h * 0.4);
       }
-      g.strokeStyle = 'rgba(40,15,40,0.75)'; g.lineWidth = 1.4; g.lineCap = 'round';
+      g.fillStyle = 'rgba(40,15,40,0.85)';
       for (const b of this.birds) {
-        const f = Math.sin(b.ph) * 5 * b.s;
-        g.beginPath(); g.moveTo(b.x - 7 * b.s, b.y - f); g.lineTo(b.x, b.y); g.lineTo(b.x + 7 * b.s, b.y - f); g.stroke();
+        const k = b.s * 1.8 * (Math.min(this.w, this.h) / 412);
+        const f = Math.sin(b.ph) * 7 * k;
+        g.beginPath();
+        g.moveTo(b.x - 12 * k, b.y - f);
+        g.quadraticCurveTo(b.x - 6 * k, b.y - f * 0.4 - 2 * k, b.x - 1.5 * k, b.y - 0.5 * k);
+        g.lineTo(b.x + 3 * k, b.y - 0.8 * k);
+        g.lineTo(b.x + 1.5 * k, b.y - 0.5 * k);
+        g.quadraticCurveTo(b.x + 6 * k, b.y - f * 0.4 - 2 * k, b.x + 12 * k, b.y - f);
+        g.quadraticCurveTo(b.x + 6 * k, b.y - f * 0.2 + 1.5 * k, b.x, b.y + 2 * k);
+        g.quadraticCurveTo(b.x - 6 * k, b.y - f * 0.2 + 1.5 * k, b.x - 12 * k, b.y - f);
+        g.fill();
       }
     }
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
@@ -1032,7 +1077,9 @@
       this.cranes = [];
       for (let i = 0; i < 3; i++) this.cranes.push({ x: rand(0, w), y: rand(0.12, 0.35) * h, v: rand(14, 26), ph: rand(0, TAU), s: rand(0.8, 1.3) });
       this.petals = [];
-      for (let i = 0; i < (this.low ? 10 : 22); i++) this.petals.push({ x: rand(0, w), y: rand(0, h), vx: rand(8, 22), vy: rand(14, 30), r: rand(1.8, 3.2), ph: rand(0, TAU) });
+      this.plum = plumSprite(); this.plumPetal = petalSprite('#f4a6ae', '#c42a37');
+      const psc = Math.min(w, h) / 412;
+      for (let i = 0; i < (this.low ? 10 : 20); i++) this.petals.push({ x: rand(0, w), y: rand(0, h), vx: rand(8, 22), vy: rand(14, 30), r: (Math.random() < 0.35 ? rand(13, 18) : rand(7, 10)) * psc, ph: rand(0, TAU), rot: rand(0, TAU), vr: rand(-1.5, 1.5) });
     }
     update(dt) {
       const s = dt / 1000;
@@ -1075,10 +1122,16 @@
         g.moveTo(c.x, c.y); g.lineTo(c.x + 9 * c.s, c.y + 1); g.stroke();
         g.fillStyle = 'rgba(190,40,35,0.9)'; g.fillRect(c.x + 9 * c.s, c.y - 0.5, 2, 2);
       }
-      // 紅梅花瓣
-      g.fillStyle = 'rgba(200,52,58,0.75)';
+      // 紅梅：整朵梅花與單片花瓣
       for (const p of this.petals) {
-        g.beginPath(); g.ellipse(p.x + Math.sin(p.ph) * 5, p.y, p.r, p.r * 0.6 * Math.abs(Math.cos(p.ph)) + 0.4, p.ph, 0, TAU); g.fill();
+        g.save();
+        g.translate(p.x + Math.sin(p.ph) * 5, p.y); g.rotate(p.rot + p.ph * 0.5 * p.vr);
+        g.scale(1, 0.55 + 0.45 * Math.abs(Math.cos(p.ph)));
+        const img = p.r > 12 * (Math.min(w, h) / 412) ? this.plum.cv : this.plumPetal.cv;
+        const sz = p.r;
+        if (img === this.plum.cv) g.drawImage(img, -sz, -sz, sz * 2, sz * 2);
+        else g.drawImage(img, -sz, -sz * 0.7, sz * 2, sz * 1.4);
+        g.restore();
       }
       // 節拍：朱日微微發亮
       g.fillStyle = `rgba(210,60,45,${beat * 0.18})`;
@@ -1406,10 +1459,13 @@
         g.restore();
       }
       g.globalAlpha = 1;
+      if (!this.dot) this.dot = softDot('255,245,200');
       for (const m of this.motes) {
-        g.fillStyle = `rgba(255,250,210,${0.35 + 0.3 * Math.sin(m.ph * 2)})`;
-        g.fillRect(m.x + Math.sin(m.ph) * 6, m.y, 1.6, 1.6);
+        const r = 4 * this.sc * (1 + 0.3 * Math.sin(m.ph * 3));
+        g.globalAlpha = 0.35 + 0.3 * Math.sin(m.ph * 2);
+        g.drawImage(this.dot.cv, m.x + Math.sin(m.ph) * 6 - r, m.y - r, r * 2, r * 2);
       }
+      g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
       // 近景竹
       for (const n of this.near) {
@@ -1464,10 +1520,12 @@
       // 新月
       const mx = w * 0.2, my = h * 0.12, mr = 18 * sc;
       glow(g, mx, my, mr * 4, '255,240,210', 0.18);
-      g.fillStyle = '#fff3d6'; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
-      g.globalCompositeOperation = 'destination-out';
-      g.beginPath(); g.arc(mx + mr * 0.45, my - mr * 0.2, mr * 0.9, 0, TAU); g.fill();
-      g.globalCompositeOperation = 'source-over';
+      // 新月：外圓弧 + 內圓弧圍成
+      g.fillStyle = '#fff3d6';
+      g.beginPath();
+      g.arc(mx, my, mr, Math.PI * 0.35, Math.PI * 1.65, false);
+      g.arc(mx + mr * 0.55, my, mr * 0.85, Math.PI * 1.45, Math.PI * 0.55, true);
+      g.closePath(); g.fill();
       glow(g, w * 0.6, h * 0.62, w * 0.8, '255,190,110', 0.35);
       // 沙丘
       const dune = (base, amp, top, bot, seed) => {
@@ -1538,8 +1596,13 @@
         g.beginPath(); top.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
       }
       g.globalCompositeOperation = 'lighter';
-      g.fillStyle = 'rgba(255,215,160,0.35)';
-      for (const p of this.sand) g.fillRect(p.x, p.y, p.s * 2.5, p.s * 0.7);
+      if (!this.dot) this.dot = softDot('255,210,150');
+      for (const p of this.sand) {
+        const r = p.s * 3.2 * this.sc;
+        g.globalAlpha = 0.45;
+        g.drawImage(this.dot.cv, p.x - r * 1.6, p.y - r * 0.6, r * 3.2, r * 1.2);
+      }
+      g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
     }
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
@@ -1696,13 +1759,15 @@
         const a = Math.max(0, Math.sin(ts * 1.5 + tp.ph)) * 0.25 + beat * 0.25 + this.flash * 0.4;
         if (a > 0.05) glow(g, tp.x, tp.y, 18 * this.sc, '200,245,255', Math.min(0.8, a));
       }
+      if (!this.star) this.star = starSprite('200,240,255');
       for (const p of this.sparkles) {
-        const a = Math.pow(Math.max(0, Math.sin(p.ph)), 6);
+        const a = Math.pow(Math.max(0, Math.sin(p.ph)), 4);
         if (a < 0.05) continue;
-        g.fillStyle = `rgba(230,250,255,${a})`;
-        g.fillRect(p.x - p.s * 2, p.y - 0.4, p.s * 4, 0.8);
-        g.fillRect(p.x - 0.4, p.y - p.s * 2, 0.8, p.s * 4);
+        const r = p.s * 7 * this.sc * (0.6 + 0.4 * a);
+        g.globalAlpha = a;
+        g.drawImage(this.star.cv, p.x - r, p.y - r, r * 2, r * 2);
       }
+      g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
     }
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.3 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
@@ -1743,7 +1808,7 @@
       for (let i = 0; i < (this.low ? 30 : 80); i++) this.embers.push(this.newEmber(true));
     }
     newEmber(anywhere, x, y) {
-      return { x: x != null ? x : rand(0, this.w), y: y != null ? y : anywhere ? rand(0, this.h) : this.h * rand(0.8, 1), vx: rand(-10, 10), vy: rand(-60, -25), life: rand(2, 5), ph: rand(0, TAU), s: rand(1, 2.4) * this.sc, temp: x != null };
+      return { x: x != null ? x : rand(0, this.w), y: y != null ? y : anywhere ? rand(0, this.h) : this.h * rand(0.8, 1), vx: rand(-10, 10), vy: rand(-60, -25), life: rand(2, 5), ph: rand(0, TAU), s: rand(1.3, 3) * this.sc, temp: x != null };
     }
     update(dt) {
       const s = dt / 1000;
@@ -1771,13 +1836,16 @@
         g.stroke();
       }
       glow(g, w * 0.5, h * 0.92, w * 0.7, '255,90,20', 0.2 + beat * 0.15 + this.flash * 0.3);
+      if (!this.dot) { this.dot = softDot('255,130,40'); this.dot2 = softDot('255,200,90'); }
       const drawE = (p) => {
-        const a = Math.min(1, p.life * 0.6) * (0.6 + 0.4 * Math.sin(p.ph * 5));
-        g.fillStyle = `rgba(255,${150 + (Math.sin(p.ph) * 60) | 0},60,${a})`;
-        g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s * 1.6);
+        const a = Math.min(1, p.life * 0.6) * (0.65 + 0.35 * Math.sin(p.ph * 5));
+        const r = p.s * 3.2;
+        g.globalAlpha = a;
+        g.drawImage((p.s > 2 * this.sc ? this.dot2 : this.dot).cv, p.x - r, p.y - r * 1.3, r * 2, r * 2.6);
       };
       for (const p of this.embers) drawE(p);
       for (const p of this.extra) drawE(p);
+      g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
     }
     burst(d, B) {
@@ -1896,8 +1964,370 @@
     }
   }
 
+  // =========================================================
+  // 長城：日出、層層山脊與雲霧、蜿蜒城牆與烽火台、人字雁陣
+  // =========================================================
+  class GreatWall {
+    constructor(low) { this.low = low; this.flash = 0; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#1b2350'], [0.3, '#5a4f86'], [0.5, '#e08a6a'], [0.6, '#ffc98a'], [1, '#3a3050']]);
+      g.fillRect(0, 0, w, h);
+      this.sun = { x: w * 0.68, y: h * 0.5, r: 30 * sc };
+      glow(g, this.sun.x, this.sun.y, w * 0.9, '255,190,120', 0.45);
+      glow(g, this.sun.x, this.sun.y, this.sun.r * 3, '255,240,200', 0.6);
+      g.fillStyle = '#fff4d8'; g.beginPath(); g.arc(this.sun.x, this.sun.y, this.sun.r, 0, TAU); g.fill();
+      const ridge = (base, amp, seed) => {
+        const pts = [];
+        for (let x = -20; x <= w + 20; x += 6) pts.push([x, base - amp * (0.6 * Math.abs(Math.sin(x * 0.0055 + seed)) + 0.4 * Math.abs(Math.sin(x * 0.017 + seed * 2.3)))]);
+        return pts;
+      };
+      const fill = (pts, top, bot, base) => {
+        const gr = g.createLinearGradient(0, Math.min(...pts.map((p) => p[1])), 0, base + h * 0.15);
+        gr.addColorStop(0, top); gr.addColorStop(1, bot);
+        g.fillStyle = gr;
+        g.beginPath(); g.moveTo(-20, h); for (const [x, y] of pts) g.lineTo(x, y); g.lineTo(w + 20, h); g.closePath(); g.fill();
+      };
+      // 城牆：沿著山脊走、上緣有垛口，向陽面受光
+      const wall = (pts, thick, lit, dark, towers) => {
+        g.lineJoin = 'round';
+        g.strokeStyle = dark; g.lineWidth = thick;
+        g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y - thick * 0.4) : g.moveTo(x, y - thick * 0.4))); g.stroke();
+        g.strokeStyle = lit; g.lineWidth = thick * 0.35;
+        g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y - thick * 0.75) : g.moveTo(x, y - thick * 0.75))); g.stroke();
+        g.fillStyle = dark;
+        for (let i = 0; i < pts.length; i += 2) { const [x, y] = pts[i]; g.fillRect(x - thick * 0.18, y - thick * 1.25, thick * 0.36, thick * 0.4); }
+        // 烽火台：放在局部最高點
+        for (let i = 3; i < pts.length - 3; i++) {
+          const [x, y] = pts[i];
+          if (y < pts[i - 3][1] && y < pts[i + 3][1] && Math.random() < towers) {
+            const tw = thick * 2.2, th = thick * 2.4;
+            g.fillStyle = dark; g.fillRect(x - tw / 2, y - th - thick * 0.6, tw, th);
+            g.fillStyle = lit; g.fillRect(x - tw / 2, y - th - thick * 0.6, tw * 0.35, th);
+            g.fillStyle = dark;
+            for (let k = 0; k < 4; k++) g.fillRect(x - tw / 2 + k * tw / 3.4, y - th - thick * 1.05, tw / 6, thick * 0.45);
+            g.fillStyle = 'rgba(20,10,10,0.8)'; g.fillRect(x - tw * 0.12, y - th * 0.75, tw * 0.24, th * 0.35);
+          }
+        }
+      };
+      const r1 = ridge(h * 0.6, h * 0.12, 1.1);
+      fill(r1, 'rgba(110,100,150,0.75)', 'rgba(200,150,150,0.2)', h * 0.6);
+      wall(r1, 4 * sc, 'rgba(240,190,160,0.75)', 'rgba(80,65,100,0.9)', 0.5);
+      for (let i = 0; i < 3; i++) glow(g, rand(0, w), h * rand(0.62, 0.7), w * 0.45, '255,220,200', 0.3);
+      const r2 = ridge(h * 0.74, h * 0.13, 3.7);
+      fill(r2, 'rgba(70,55,90,0.92)', 'rgba(140,90,110,0.5)', h * 0.74);
+      wall(r2, 7 * sc, 'rgba(255,190,140,0.85)', 'rgba(45,32,55,1)', 0.6);
+      for (let i = 0; i < 3; i++) glow(g, rand(0, w), h * rand(0.78, 0.85), w * 0.5, '255,210,200', 0.25);
+      const r3 = ridge(h * 0.92, h * 0.1, 6.2);
+      fill(r3, 'rgba(35,25,45,1)', 'rgba(25,18,32,1)', h * 0.92);
+      // 光束素材
+      const R = (this.ray = layer(60, 500));
+      const rg = R.g.createLinearGradient(0, 0, 0, 500);
+      rg.addColorStop(0, 'rgba(255,230,180,0.5)'); rg.addColorStop(1, 'rgba(255,230,180,0)');
+      R.g.fillStyle = rg; R.g.beginPath(); R.g.moveTo(28, 0); R.g.lineTo(32, 0); R.g.lineTo(60, 500); R.g.lineTo(0, 500); R.g.fill();
+      this.geese = [];
+      const lead = { x: rand(0.1, 0.4) * w, y: h * rand(0.2, 0.32) };
+      for (let i = 0; i < 9; i++) {
+        const k = Math.ceil(i / 2) * (i % 2 ? 1 : -1);
+        this.geese.push({ dx: -Math.abs(k) * 16 * sc, dy: k * 9 * sc, ph: rand(0, TAU) });
+      }
+      this.flock = { x: lead.x, y: lead.y, v: 18 * sc };
+      this.mists = [];
+      for (let i = 0; i < (this.low ? 3 : 5); i++) this.mists.push({ x: rand(0, w), y: h * rand(0.62, 0.9), r: w * rand(0.3, 0.5), v: rand(4, 10) });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.15, s);
+      this.flock.x += this.flock.v * s * (1 + this.flash);
+      if (this.flock.x > this.w + 200 * this.sc) { this.flock.x = -60 * this.sc; this.flock.y = this.h * rand(0.15, 0.32); }
+      for (const gs of this.geese) gs.ph += s * 6;
+      for (const m of this.mists) { m.x += m.v * s; if (m.x - m.r > this.w) m.x = -m.r; }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      g.globalCompositeOperation = 'lighter';
+      g.save(); g.translate(this.sun.x, this.sun.y);
+      for (let i = 0; i < 9; i++) {
+        g.save(); g.rotate(-Math.PI / 2 + (i - 4) * 0.28 + Math.sin(t / 3000 + i) * 0.03);
+        g.globalAlpha = (0.12 + beat * 0.06 + this.flash * 0.15) * (i % 2 ? 0.6 : 1);
+        g.drawImage(this.ray.cv, -30, 0, 60, h * 0.9);
+        g.restore();
+      }
+      g.restore(); g.globalAlpha = 1;
+      for (const m of this.mists) glow(g, m.x, m.y, m.r, '255,225,210', 0.12);
+      g.globalCompositeOperation = 'source-over';
+      // 人字雁陣
+      g.fillStyle = 'rgba(40,25,45,0.85)';
+      const k = this.sc * 1.3;
+      for (const gs of this.geese) {
+        const x = this.flock.x + gs.dx, y = this.flock.y + gs.dy;
+        const f = Math.sin(gs.ph) * 5 * k;
+        g.beginPath();
+        g.moveTo(x - 9 * k, y - f); g.quadraticCurveTo(x - 4 * k, y - f * 0.3 - 1.5 * k, x, y);
+        g.lineTo(x + 5 * k, y - 0.6 * k); g.lineTo(x, y + 1.2 * k);
+        g.quadraticCurveTo(x - 4 * k, y - f * 0.2 + 1 * k, x - 9 * k, y - f); g.fill();
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x - 2 * k, y - f * 0.6, x + 2 * k, y - f * 1.1); g.lineTo(x + 2.5 * k, y); g.fill();
+      }
+    }
+    burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
+  }
+
+  // =========================================================
+  // 荷塘月色：月夜池塘、荷葉、會擺動的荷花、悠游的錦鯉、漣漪
+  // =========================================================
+  class LotusPond {
+    constructor(low) { this.low = low; this.ripples = []; this.flash = 0; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#050b1c'], [0.18, '#0b1d33'], [0.22, '#0a2a33'], [1, '#03141a']]);
+      g.fillRect(0, 0, w, h);
+      // 月亮與倒影
+      const mx = w * 0.78, my = h * 0.08, mr = 22 * sc;
+      glow(g, mx, my, mr * 5, '230,240,255', 0.25);
+      g.fillStyle = '#f4f6ff'; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
+      this.moonX = mx;
+      // 遠岸柳樹剪影
+      g.fillStyle = '#020910';
+      g.beginPath(); g.moveTo(0, h * 0.21);
+      for (let x = 0; x <= w; x += 10) g.lineTo(x, h * 0.2 - Math.abs(Math.sin(x * 0.03)) * 6 * sc - (x < w * 0.3 ? 18 * sc * Math.sin(x / (w * 0.3) * Math.PI) : 0));
+      g.lineTo(w, h * 0.22); g.lineTo(0, h * 0.22); g.fill();
+      g.strokeStyle = 'rgba(2,9,16,0.9)'; g.lineWidth = 1;
+      for (let i = 0; i < 40; i++) { const x = rand(0, w * 0.35), y = h * 0.16; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 3, y + 20 * sc, x + rand(-2, 4), y + rand(25, 45) * sc); g.stroke(); }
+      // 荷葉（俯視的圓葉、放射葉脈、缺口）
+      this.pads = [];
+      const pad = (x, y, r, tone) => {
+        const gr = g.createRadialGradient(x - r * 0.2, y - r * 0.2, 0, x, y, r);
+        gr.addColorStop(0, `rgba(${70 + tone},${130 + tone},${80 + tone * 0.5},1)`);
+        gr.addColorStop(1, `rgba(${20 + tone * 0.3},${60 + tone * 0.5},${35},1)`);
+        g.fillStyle = gr;
+        const notch = rand(0, TAU);
+        g.beginPath(); g.moveTo(x, y); g.arc(x, y, r, notch + 0.06, notch + TAU - 0.06); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(160,220,150,0.25)'; g.lineWidth = 0.8;
+        for (let k = 0; k < 14; k++) { const a = notch + 0.3 + (k / 14) * (TAU - 0.6); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * r * 0.92, y + Math.sin(a) * r * 0.92); g.stroke(); }
+        g.strokeStyle = 'rgba(200,255,200,0.15)'; g.beginPath(); g.arc(x, y, r * 0.97, notch + 0.2, notch + TAU - 0.2); g.stroke();
+      };
+      for (let i = 0; i < 22; i++) {
+        const y = h * rand(0.25, 1), r = rand(16, 34) * sc * (0.6 + (y / h) * 0.6);
+        const x = rand(0, w);
+        pad(x, y, r, rand(-10, 20) | 0);
+        if (Math.random() < 0.35) this.pads.push({ x, y: y - r * 0.2, r });
+      }
+      // 月光倒影
+      for (let i = 0; i < 26; i++) {
+        g.fillStyle = `rgba(220,235,255,${rand(0.05, 0.18)})`;
+        g.fillRect(mx - rand(4, 30) * sc, h * 0.24 + i * h * 0.02, rand(8, 60) * sc, 1.5);
+      }
+      // 荷花素材（側視、粉色多層花瓣）
+      const F = (this.flower = layer(60, 60));
+      const fg = F.g;
+      const petal = (ang, len, wd, c1, c2) => {
+        fg.save(); fg.translate(30, 44); fg.rotate(ang);
+        const gr = fg.createLinearGradient(0, 0, 0, -len);
+        gr.addColorStop(0, c2); gr.addColorStop(1, c1);
+        fg.fillStyle = gr;
+        fg.beginPath(); fg.moveTo(0, 0); fg.quadraticCurveTo(-wd, -len * 0.5, 0, -len); fg.quadraticCurveTo(wd, -len * 0.5, 0, 0); fg.fill();
+        fg.restore();
+      };
+      for (const a of [-1.1, 1.1, -0.7, 0.7]) petal(a, 22, 9, '#ffd6e6', '#d4507e');
+      for (const a of [-0.35, 0.35, 0]) petal(a, 28, 10, '#fff0f6', '#e0608c');
+      fg.fillStyle = '#f2d36a'; fg.beginPath(); fg.ellipse(30, 30, 4, 2.5, 0, 0, TAU); fg.fill();
+      this.glowDot = softDot('255,180,210');
+      // 錦鯉
+      this.koi = [];
+      const kcols = [['255,120,40', '255,250,240'], ['255,250,245', '230,60,40'], ['255,180,60', '255,255,255'], ['30,30,30', '255,140,60']];
+      for (let i = 0; i < (this.low ? 3 : 5); i++) this.koi.push({ x: rand(0, w), y: h * rand(0.3, 0.95), a: rand(0, TAU), v: rand(18, 34) * sc, turn: rand(-0.4, 0.4), ph: rand(0, TAU), len: rand(40, 58) * sc, col: kcols[i % kcols.length] });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.2, s);
+      for (const k of this.koi) {
+        k.ph += s * (5 + this.flash * 6);
+        if (Math.random() < s * 0.4) k.turn = rand(-0.6, 0.6);
+        k.a += k.turn * s;
+        const sp = k.v * (1 + this.flash * 1.5);
+        k.x += Math.cos(k.a) * sp * s; k.y += Math.sin(k.a) * sp * s;
+        if (k.x < -40) k.x = this.w + 40; if (k.x > this.w + 40) k.x = -40;
+        if (k.y < this.h * 0.26) k.a = Math.abs(k.a); if (k.y > this.h + 30) k.a = -Math.abs(k.a);
+        if (Math.random() < s * 0.15 && this.ripples.length < 25) this.ripples.push({ x: k.x, y: k.y, t: 0, max: 1.6 });
+      }
+      for (const r of this.ripples) r.t += s;
+      this.ripples = this.ripples.filter((r) => r.t < r.max);
+    }
+    drawKoi(g, k) {
+      const L = k.len;
+      g.save(); g.translate(k.x, k.y); g.rotate(k.a);
+      const sw = Math.sin(k.ph) * 0.35;
+      // 尾鰭
+      g.save(); g.translate(-L * 0.5, 0); g.rotate(sw);
+      g.fillStyle = `rgba(${k.col[0]},0.75)`;
+      g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(-L * 0.25, -L * 0.25, -L * 0.42, -L * 0.18); g.quadraticCurveTo(-L * 0.3, 0, -L * 0.42, L * 0.18); g.quadraticCurveTo(-L * 0.25, L * 0.25, 0, 0); g.fill();
+      g.restore();
+      // 身體
+      const gr = g.createLinearGradient(0, -L * 0.15, 0, L * 0.15);
+      gr.addColorStop(0, `rgba(${k.col[0]},1)`); gr.addColorStop(0.5, `rgba(${k.col[0]},0.95)`); gr.addColorStop(1, `rgba(${k.col[0]},0.8)`);
+      g.fillStyle = gr;
+      g.beginPath();
+      g.moveTo(L * 0.5, 0);
+      g.bezierCurveTo(L * 0.45, -L * 0.17, -L * 0.1, -L * 0.18, -L * 0.52, Math.sin(k.ph) * L * 0.03);
+      g.bezierCurveTo(-L * 0.1, L * 0.18, L * 0.45, L * 0.17, L * 0.5, 0);
+      g.fill();
+      // 斑紋
+      g.fillStyle = `rgba(${k.col[1]},0.9)`;
+      g.beginPath(); g.ellipse(L * 0.1, -L * 0.03, L * 0.13, L * 0.07, 0.3, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(-L * 0.2, L * 0.03, L * 0.09, L * 0.05, -0.2, 0, TAU); g.fill();
+      // 胸鰭
+      g.fillStyle = `rgba(${k.col[0]},0.55)`;
+      g.beginPath(); g.ellipse(L * 0.2, -L * 0.17, L * 0.1, L * 0.04, -0.8 + sw, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(L * 0.2, L * 0.17, L * 0.1, L * 0.04, 0.8 - sw, 0, TAU); g.fill();
+      g.restore();
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      for (const k of this.koi) this.drawKoi(g, k);
+      g.strokeStyle = 'rgba(200,230,255,0.35)'; g.lineWidth = 1;
+      for (const r of this.ripples) {
+        const k = r.t / r.max;
+        g.globalAlpha = (1 - k) * 0.8;
+        g.beginPath(); g.ellipse(r.x, r.y, 4 + k * 40 * this.sc, 2 + k * 16 * this.sc, 0, 0, TAU); g.stroke();
+      }
+      g.globalAlpha = 1;
+      for (let i = 0; i < this.pads.length; i++) {
+        const p = this.pads[i];
+        const sway = Math.sin(t / 1400 + i) * 0.06;
+        const sz = p.r * 1.3;
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.4 + beat * 0.3 + this.flash * 0.3;
+        g.drawImage(this.glowDot.cv, p.x - sz, p.y - sz * 1.1, sz * 2, sz * 2);
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        g.save(); g.translate(p.x, p.y); g.rotate(sway);
+        g.drawImage(this.flower.cv, -sz * 0.5, -sz * 0.73, sz, sz);
+        g.restore();
+      }
+    }
+    burst(d, B) {
+      this.flash = Math.min(1.5, this.flash + 0.3 * d.lines);
+      for (let i = 0; i < d.lines * 4; i++) this.ripples.push({ x: rand(0, this.w), y: this.h * rand(0.3, 1), t: 0, max: 1.8 });
+    }
+  }
+
+  // =========================================================
+  // 仙山：雲海上的石柱群峰、山頂涼亭、瀑布、仙鶴、流雲
+  // =========================================================
+  class FairyPeaks {
+    constructor(low) { this.low = low; this.flash = 0; this.bloomScale = 0.4; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      const sc = (this.sc = Math.min(w, h) / 412);
+      const L = (this.bg = layer(w, h));
+      const g = L.g;
+      g.fillStyle = vgrad(g, h, [[0, '#9fc8d8'], [0.4, '#e6e2d2'], [0.7, '#f5dcc4'], [1, '#c9d6dc']]);
+      g.fillRect(0, 0, w, h);
+      glow(g, w * 0.3, h * 0.25, w * 0.7, '255,245,225', 0.6);
+      // 石柱群峰（遠淡近深，頂上有松）
+      const pillar = (x, top, wd, color, hi) => {
+        const path = () => {
+          g.beginPath(); g.moveTo(x - wd * 0.5, h);
+          for (let y = h; y > top; y -= 12) g.lineTo(x - wd * 0.5 + Math.sin(y * 0.05 + x) * wd * 0.08, y);
+          g.quadraticCurveTo(x, top - wd * 0.15, x + wd * 0.5, top + wd * 0.05);
+          for (let y = top; y < h; y += 12) g.lineTo(x + wd * 0.5 + Math.sin(y * 0.04 + x * 2) * wd * 0.08, y);
+          g.closePath();
+        };
+        g.fillStyle = color; path(); g.fill();
+        // 立體感：左側受光、右側陰影
+        const sh = g.createLinearGradient(x - wd * 0.5, 0, x + wd * 0.5, 0);
+        sh.addColorStop(0, hi); sh.addColorStop(0.35, 'rgba(255,255,255,0)'); sh.addColorStop(0.7, 'rgba(0,0,0,0.12)'); sh.addColorStop(1, 'rgba(0,0,0,0.35)');
+        g.fillStyle = sh; path(); g.fill();
+        g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1;
+        for (let y = top + 10; y < h; y += rand(14, 30)) { g.beginPath(); g.moveTo(x - wd * 0.5, y); g.lineTo(x + wd * 0.5, y + rand(-3, 3)); g.stroke(); }
+        // 頂上松
+        for (let k = 0; k < 4; k++) {
+          const px = x + rand(-0.35, 0.35) * wd, ph = rand(8, 16) * sc;
+          g.fillStyle = color === '#2c3d36' ? '#1c2b22' : 'rgba(60,85,80,0.7)';
+          g.beginPath(); g.moveTo(px, top - ph); g.lineTo(px - ph * 0.6, top + 2); g.lineTo(px + ph * 0.6, top + 2); g.fill();
+        }
+      };
+      for (let i = 0; i < 7; i++) pillar(rand(0, w), h * rand(0.35, 0.55), rand(24, 40) * sc, 'rgba(110,140,150,0.45)', 'rgba(255,255,255,0.08)');
+      for (let i = 0; i < 3; i++) glow(g, rand(0, w), h * rand(0.6, 0.8), w * 0.5, '255,255,255', 0.5);
+      const near = [[0.08, 0.4, 56], [0.9, 0.32, 64], [0.5, 0.58, 48]];
+      this.peaks = [];
+      for (const [px, pt, pw] of near) { pillar(px * w, h * pt, pw * sc, '#2c3d36', 'rgba(200,230,210,0.15)'); this.peaks.push({ x: px * w, top: h * pt, wd: pw * sc }); }
+      // 山頂涼亭（右側高峰）
+      const P = this.peaks[1];
+      const ex = P.x, ey = P.top - 4 * sc, ew = 26 * sc;
+      g.fillStyle = '#7a1e1e'; g.fillRect(ex - ew * 0.35, ey - ew * 0.55, ew * 0.08, ew * 0.55); g.fillRect(ex + ew * 0.27, ey - ew * 0.55, ew * 0.08, ew * 0.55);
+      g.fillStyle = '#1a1a1a';
+      g.beginPath(); g.moveTo(ex - ew * 0.65, ey - ew * 0.5); g.quadraticCurveTo(ex - ew * 0.3, ey - ew * 0.55, ex, ey - ew * 1.05); g.quadraticCurveTo(ex + ew * 0.3, ey - ew * 0.55, ex + ew * 0.65, ey - ew * 0.5); g.lineTo(ex, ey - ew * 0.62); g.fill();
+      // 瀑布起點（左側高峰）
+      const Q = this.peaks[0];
+      this.fall = { x: Q.x + Q.wd * 0.35, top: Q.top + 20 * sc, bot: h * 0.85, wd: 7 * sc };
+      this.drops = [];
+      for (let i = 0; i < (this.low ? 15 : 35); i++) this.drops.push({ y: rand(0, 1), v: rand(0.5, 0.9), dx: rand(-1, 1) });
+      // 雲
+      this.cloud = softDot('255,255,255');
+      this.clouds = [];
+      for (let i = 0; i < (this.low ? 8 : 16); i++) this.clouds.push({ x: rand(-0.2, 1.2) * w, y: h * rand(0.55, 1), r: rand(60, 130) * sc, v: rand(4, 12) * sc, a: rand(0.45, 0.8) });
+      this.cranes = [];
+      for (let i = 0; i < 3; i++) this.cranes.push({ x: rand(0, w), y: h * rand(0.12, 0.35), v: rand(14, 24) * sc, ph: rand(0, TAU), s: rand(1.2, 1.8) * sc });
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.flash *= Math.pow(0.2, s);
+      for (const d of this.drops) { d.y += d.v * s; if (d.y > 1) d.y -= 1; }
+      for (const c of this.clouds) { c.x += c.v * s; if (c.x - c.r > this.w) c.x = -c.r; }
+      for (const c of this.cranes) { c.x += c.v * s; c.ph += s * 2.4; if (c.x > this.w + 50) { c.x = -50; c.y = this.h * rand(0.12, 0.35); } }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h;
+      g.drawImage(this.bg.cv, 0, 0, w, h);
+      // 瀑布
+      const F = this.fall;
+      const fg = g.createLinearGradient(0, F.top, 0, F.bot);
+      fg.addColorStop(0, 'rgba(255,255,255,0.85)'); fg.addColorStop(1, 'rgba(255,255,255,0.15)');
+      g.fillStyle = fg; g.fillRect(F.x - F.wd / 2, F.top, F.wd, F.bot - F.top);
+      g.strokeStyle = 'rgba(210,235,245,0.9)'; g.lineWidth = 1;
+      for (const d of this.drops) {
+        const y = F.top + d.y * (F.bot - F.top);
+        g.beginPath(); g.moveTo(F.x + d.dx * F.wd * 0.4, y); g.lineTo(F.x + d.dx * F.wd * 0.4, y + 10 * this.sc); g.stroke();
+      }
+      // 仙鶴：白身、黑翼尖、紅頂
+      for (const c of this.cranes) {
+        const k = c.s, f = Math.sin(c.ph) * 9 * k;
+        g.fillStyle = '#fbfbf8';
+        g.beginPath(); g.ellipse(c.x, c.y, 7 * k, 2.2 * k, 0, 0, TAU); g.fill();
+        g.beginPath(); g.moveTo(c.x - 2 * k, c.y); g.quadraticCurveTo(c.x - 4 * k, c.y - f * 0.6, c.x - 14 * k, c.y - f); g.lineTo(c.x - 9 * k, c.y - f * 0.8 + 2 * k); g.quadraticCurveTo(c.x - 3 * k, c.y + 1 * k, c.x + 2 * k, c.y); g.fill();
+        g.fillStyle = '#222';
+        g.beginPath(); g.moveTo(c.x - 14 * k, c.y - f); g.lineTo(c.x - 10 * k, c.y - f * 0.85 + 1.5 * k); g.lineTo(c.x - 12 * k, c.y - f * 0.7); g.fill();
+        g.strokeStyle = '#f2f2ee'; g.lineWidth = 1.2 * k;
+        g.beginPath(); g.moveTo(c.x + 6 * k, c.y - 0.5 * k); g.lineTo(c.x + 13 * k, c.y - 1.5 * k); g.stroke();
+        g.strokeStyle = '#333'; g.lineWidth = 0.8 * k;
+        g.beginPath(); g.moveTo(c.x - 6 * k, c.y + 0.5 * k); g.lineTo(c.x - 15 * k, c.y + 2 * k); g.stroke();
+        g.fillStyle = '#d42a2a'; g.beginPath(); g.arc(c.x + 13 * k, c.y - 1.8 * k, 1 * k, 0, TAU); g.fill();
+      }
+      // 流雲
+      for (const c of this.clouds) {
+        g.globalAlpha = c.a * (0.9 + this.flash * 0.1);
+        g.drawImage(this.cloud.cv, c.x - c.r, c.y - c.r * 0.45, c.r * 2, c.r * 0.9);
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'lighter';
+      glow(g, w * 0.3, h * 0.25, w * 0.5, '255,240,210', 0.08 + beat * 0.08 + this.flash * 0.15);
+      g.globalCompositeOperation = 'source-over';
+    }
+    burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); for (const c of this.clouds) c.x += 6 * d.lines * this.sc; }
+  }
+
   root.LumenScenes = {
     星空: Starfield, 深海: DeepSea, 竹林: Bamboo, 極光: Aurora, 水墨: InkWash, 螢火森林: Firefly, 霓虹都市: NeonCity,
     敦煌: Dunhuang, 櫻花: Sakura, 冰晶洞窟: IceCave, 燈節: Lantern, 雨夜: RainyCity, 熔岩: Lava, 夕陽雲海: Sunset,
+    長城: GreatWall, 荷塘月色: LotusPond, 仙山: FairyPeaks,
   };
 })(typeof self !== 'undefined' ? self : this);

@@ -181,6 +181,39 @@
         [[0, 7, 4], [4, 5, 4], [8, 4, 4], [12, 3, 4], [16, 1, 8], [24, 0, 8]],
       ],
     },
+    {
+      name: '長城', bpm: 104, root: 58, scale: 'gong', prog: [0, 3, 4, 2], sevenths: false, gong: true, epic: 'eastern', vol: 0.8,
+      pad: 'choir', arp: 'pipa', bass: 'round', lead: 'suona', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.0,
+      arpSeq: [0, 1, 2, 1, 3, 2, 1, 2, 0, 1, 2, 3, 4, 3, 2, 1],
+      bassSeq: 'R---R-5-R---R-O-',
+      drums: { tanggu: 'x...x...x..xx...', woodblock: '..x...x...x...x.', cymbal: '....x.......x...' },
+      leadSeq: [
+        [[0, 5, 4], [4, 6, 2], [6, 7, 2], [8, 8, 6], [14, 7, 2], [16, 6, 4], [20, 5, 4], [24, 4, 8]],
+        [[0, 8, 3], [3, 7, 1], [4, 6, 4], [8, 5, 4], [12, 6, 4], [16, 7, 6], [22, 8, 2], [24, 10, 8]],
+      ],
+    },
+    {
+      name: '荷塘月色', bpm: 68, root: 62, scale: 'gong', prog: [0, 4, 3, 1], sevenths: false, swing: 0.1, epic: 'eastern', vol: 0.85,
+      pad: 'warm', arp: 'zheng', bass: 'round', lead: 'erhu', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.4,
+      arpSeq: [0, -1, 2, -1, 4, 3, -1, 2, 1, -1, 3, -1, 5, 4, -1, 2],
+      bassSeq: 'R-------5-------',
+      drums: { woodblock: '........x.......', shaker: '..x...x...x...x.' },
+      leadSeq: [
+        [[0, 4, 6], [6, 3, 2], [8, 2, 8], [16, 3, 4], [20, 4, 4], [24, 1, 8]],
+        [[0, 5, 4], [4, 6, 4], [8, 7, 8], [16, 6, 4], [20, 4, 4], [24, 2, 8]],
+      ],
+    },
+    {
+      name: '仙山', bpm: 84, root: 59, scale: 'zhi', prog: [0, 3, 1, 4], sevenths: false, gong: true, epic: 'eastern', vol: 0.85,
+      pad: 'choir', arp: 'zheng', bass: 'sub', lead: 'dizi', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.5,
+      arpSeq: [0, 2, 4, -1, 3, -1, 2, 1, 0, 2, 4, -1, 5, -1, 4, 2],
+      bassSeq: 'R-------R---5---',
+      drums: { tanggu: 'x.......x.....x.', woodblock: '....x.......x...' },
+      leadSeq: [
+        [[0, 7, 8], [8, 6, 4], [12, 5, 4], [16, 4, 6], [22, 3, 2], [24, 2, 8]],
+        [[0, 9, 4], [4, 8, 4], [8, 7, 8], [16, 8, 4], [20, 6, 4], [24, 5, 8]],
+      ],
+    },
   ];
 
   function degToMidi(song, deg, oct) {
@@ -457,6 +490,7 @@
         flute: { waves: [['sine', 0, 0.8], ['triangle', 0, 0.15, 2]], a: 0.07, s: 0.8, r: 0.3, vib: [4.5, 0.007], peak: 0.08, wet: 0.6 },
         whale: { waves: [['sine', 0, 1], ['triangle', 0, 0.2]], pitchFrom: 0.94, glide: 0.35, a: 0.35, s: 0.85, r: 1.2, vib: [3, 0.01], peak: 0.07, wet: 0.85 },
         xiao: { waves: [['sine', 0, 0.9], ['triangle', 0, 0.1, 2]], pitchFrom: 0.97, glide: 0.15, a: 0.1, s: 0.8, r: 0.5, vib: [4, 0.007], peak: 0.09, wet: 0.7 },
+        suona: { waves: [['square', 0, 0.35], ['sawtooth', 0, 0.45]], ftype: 'bandpass', cut: 1500, q: 1.6, pitchFrom: 0.94, glide: 0.08, a: 0.03, s: 0.85, r: 0.2, vib: [6, 0.012], peak: 0.09, wet: 0.4 },
         dizi: { waves: [['sine', 0, 0.85], ['triangle', 0, 0.12, 2]], pitchFrom: 1.06, glide: 0.07, a: 0.05, s: 0.8, r: 0.25, vib: [5.5, 0.008], peak: 0.085, wet: 0.55 },
         erhu: { waves: [['sawtooth', -4, 0.45], ['sawtooth', 4, 0.35]], cut: 1700, q: 1.2, pitchFrom: 0.955, glide: 0.14, a: 0.08, s: 0.85, r: 0.3, vib: [6, 0.011], peak: 0.05, wet: 0.5 },
       }[timbre];
