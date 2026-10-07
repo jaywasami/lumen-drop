@@ -81,6 +81,7 @@
     maxResets: 15,
     startLevel: 1,
     linesPerLevel: 10,
+    gravityScale: 1, // 等級對速度的影響倍率（< 1 = 加速較慢）
   };
 
   function gravityCps(level) {
@@ -446,7 +447,7 @@
       }
 
       // 重力
-      let cps = gravityCps(this.level);
+      let cps = gravityCps(1 + (this.level - 1) * s.gravityScale);
       const soft = this.held.softDrop;
       if (soft) cps = s.sdf >= 40 ? Infinity : cps * s.sdf;
       if (cps === Infinity) {

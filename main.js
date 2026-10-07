@@ -12,7 +12,7 @@
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, difficulty: 'relaxed', transitions: true,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -49,7 +49,11 @@
   }
 
   // ================= 狀態 =================
-  let mode = 'menu'; // menu | countdown | playing | paused | over
+  let mode = 'menu'; // menu | countdown | playing | transition | paused | over
+  let resumeMode = 'playing';
+  let tr = null; // 過關過場
+  let levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
+  const DIFFICULTY = { relaxed: { linesPerLevel: 12, gravityScale: 0.55 }, normal: { linesPerLevel: 10, gravityScale: 0.8 }, classic: { linesPerLevel: 10, gravityScale: 1 } };
   let game = null;
   let countdown = 0;
   let lastCount = 4;
@@ -90,12 +94,14 @@
 
   // ================= 主題 / 場景 =================
   const THEMES = [
-    { name: '星空', accent: [122, 167, 255], style: 'gem' },
-    { name: '深海', accent: [77, 232, 255], style: 'glass' },
-    { name: '極光', accent: [109, 255, 176], style: 'glass' },
-    { name: '霓虹都市', accent: [255, 93, 230], style: 'neon' },
-    { name: '櫻花', accent: [255, 166, 216], style: 'soft' },
-    { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem' },
+    { name: '星空', accent: [122, 167, 255], style: 'gem', sub: '在星河之間，靜靜落下' },
+    { name: '深海', accent: [77, 232, 255], style: 'glass', sub: '沉入光照不到的地方' },
+    { name: '極光', accent: [109, 255, 176], style: 'glass', sub: '夜空在呼吸' },
+    { name: '水墨', accent: [214, 72, 58], style: 'porcelain', sub: '山色有無中', light: true },
+    { name: '霓虹都市', accent: [255, 93, 230], style: 'neon', sub: '午夜的城市不睡' },
+    { name: '櫻花', accent: [255, 166, 216], style: 'soft', sub: '花落知多少' },
+    { name: '燈節', accent: [255, 170, 60], style: 'gold', sub: '東風夜放花千樹' },
+    { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
   ];
   let themeIdx = 0;
   const accent = THEMES[0].accent.slice();
@@ -113,6 +119,7 @@
   }
   function setTheme(i, instant) {
     themeIdx = i;
+    touchEl.classList.toggle('light', !!THEMES[i].light);
     const next = getScene(i);
     if (next === scene) return;
     if (instant || !scene) { scene = next; prevScene = null; sceneFade = 1; return; }
@@ -179,6 +186,17 @@
       rr(g, x + 0.5, y + 0.5, s - 1, s - 1, rad); g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.7)';
       g.beginPath(); g.ellipse(x + s * 0.3, y + s * 0.22, s * 0.18, s * 0.08, -0.5, 0, Math.PI * 2); g.fill();
+    } else if (style === 'porcelain') {
+      const pc = mix(col, [245, 240, 228], 0.22);
+      g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = c * 0.2;
+      g.fillStyle = rgb(pc);
+      rr(g, x, y, s, s, c * 0.16); g.fill();
+      g.shadowBlur = 0;
+      const gr = g.createRadialGradient(x + s * 0.3, y + s * 0.25, 0, x + s * 0.5, y + s * 0.5, s * 0.8);
+      gr.addColorStop(0, 'rgba(255,255,255,0.7)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.12)'); gr.addColorStop(1, rgb(mix(col, [20, 20, 30], 0.5), 0.35));
+      g.fillStyle = gr; rr(g, x, y, s, s, c * 0.16); g.fill();
+      g.strokeStyle = 'rgba(20,20,30,0.75)'; g.lineWidth = Math.max(1.2, c * 0.06);
+      rr(g, x + 0.5, y + 0.5, s - 1, s - 1, c * 0.16); g.stroke();
     } else if (style === 'soft') {
       const pc = mix(col, [255, 240, 248], 0.38);
       g.shadowColor = rgb(pc, 0.8); g.shadowBlur = c * 0.35;
@@ -203,6 +221,10 @@
       g.beginPath(); g.moveTo(pad + c * 0.2, pad + c * 0.12); g.lineTo(pad + c * 0.12, pad + c * 0.12); g.lineTo(pad + c * 0.12, pad + c * 0.8); g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.16)';
       rr(g, pad + c * 0.2, pad + c * 0.2, c * 0.6, c * 0.6, c * 0.12); g.fill();
+      if (style === 'gold') {
+        g.strokeStyle = 'rgba(255,214,120,0.95)'; g.lineWidth = Math.max(1.2, c * 0.075);
+        rr(g, x + 0.5, y + 0.5, s - 1, s - 1, rad); g.stroke();
+      }
     }
     return { cv, pad, c, size };
   }
@@ -310,9 +332,10 @@
   const musicStage = () => {
     if (!game) return 0;
     const base = Math.min(2, Math.floor((game.level - 1) / 2));
-    return Math.min(5, base + Math.floor((game.lines % 10) / 2));
+    const lpl = game.settings.linesPerLevel;
+    return Math.min(5, base + Math.floor((game.lines % lpl) * 5 / lpl));
   };
-  // 每輪完 6 個場景，下一輪曲速加快
+  // 每輪完所有場景，下一輪曲速加快
   const musicRate = () => (game ? 1 + 0.05 * Math.min(3, Math.floor((game.level - 1) / THEMES.length)) : 1);
   function onGameEvent(type, d) {
     switch (type) {
@@ -353,6 +376,7 @@
         Snd.play('clear', d);
         Snd.setStage(musicStage());
         Snd.setBoost(d.combo >= 2 ? d.combo : 0);
+        levelStart.maxCombo = Math.max(levelStart.maxCombo, d.combo);
         const low = settings.fx === 'low';
         const cxB = bx + cell * 5;
         for (const row of d.rows) {
@@ -409,11 +433,13 @@
       }
       case 'levelUp': {
         const idx = (d.level - 1) % THEMES.length;
-        if (idx !== themeIdx) {
-          setTheme(idx);
-          Snd.playSong(idx, musicStage(), musicRate());
-        }
+        Snd.playSong(idx, musicStage(), musicRate());
         Snd.play('levelUp');
+        if (settings.transitions && mode === 'playing') {
+          startTransition(idx, d.level);
+          break;
+        }
+        setTheme(idx);
         popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
         fx.rings.push({ t: 0, life: 1.1 });
         fx.pulse = 1;
@@ -437,7 +463,10 @@
     ensureAudio();
     input.releaseAll();
     const lv = Math.max(1, Math.min(15, settings.startLevel | 0));
-    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv }, onEvent: onGameEvent });
+    const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
+    game = new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale }, onEvent: onGameEvent });
+    levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
+    tr = null;
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
     fx.shards.length = 0; fx.waves.length = 0; fx.aberr = 0; fx.flash = 0; fx.impact = 0; fx.impactV = 0; fx.rowT = 1;
     fx.shake = 0; fx.pulse = 0; overFade = 0; overShown = false; lastWasHardDrop = false;
@@ -452,12 +481,13 @@
     requestWake();
   }
   function pauseGame() {
-    if (mode !== 'playing') return;
+    if (mode !== 'playing' && mode !== 'transition') return;
+    resumeMode = mode;
     mode = 'paused'; input.releaseAll(); showOverlay('pause'); Snd.setMuffled(true); Snd.play('ui');
   }
   function resumeGame() {
     if (mode !== 'paused') return;
-    mode = 'playing'; showOverlay(null); Snd.setMuffled(false); Snd.play('ui');
+    mode = resumeMode || 'playing'; showOverlay(null); Snd.setMuffled(false); Snd.play('ui');
   }
   function toMenu() {
     mode = 'menu'; input.releaseAll(); game = null; showOverlay('menu');
@@ -468,6 +498,97 @@
     if (audioStarted) Snd.playSong(0, 0);
     releaseWake();
   }
+  // ================= 過關過場 =================
+  const TR_LEN = 3.4;
+  function startTransition(toIdx, level) {
+    const secs = (game.time - levelStart.time) / 1000;
+    tr = {
+      t: 0, to: toIdx, level, switched: false,
+      lines: game.lines - levelStart.lines, score: game.score - levelStart.score,
+      time: `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`, combo: levelStart.maxCombo,
+    };
+    mode = 'transition';
+    fx.popups.length = 0;
+    input.releaseAll();
+  }
+  function updateTransition(dt) {
+    tr.t += dt / 1000;
+    if (!tr.switched && tr.t > 0.8) {
+      tr.switched = true;
+      setTheme(tr.to);
+      fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.3, s: 1.2 });
+      fx.flash = Math.max(fx.flash, 0.45);
+      fx.pulse = 1;
+    }
+    if (tr.t >= TR_LEN) {
+      mode = 'playing';
+      levelStart = { time: game.time, score: game.score, lines: game.lines, maxCombo: 0 };
+      tr = null;
+    }
+  }
+  const SERIF = '"Noto Serif TC", "Songti TC", "Source Han Serif TC", "PMingLiU", serif';
+  function drawTransition() {
+    const t = tr.t;
+    const cx = bx + cell * 5, cy = by + cell * 8.5;
+    const env = Math.min(1, t / 0.3) * Math.min(1, (TR_LEN - t) / 0.4);
+    ctx.fillStyle = `rgba(0,0,8,${0.55 * env})`;
+    ctx.fillRect(0, 0, vw, vh);
+    const fade = (a, b, x) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+    // 1. 過關成績
+    const a1 = fade(0.05, 0.3, t) * (1 - fade(1.0, 1.25, t));
+    if (a1 > 0) {
+      ctx.save(); ctx.globalAlpha = a1;
+      const sc = 1.25 - 0.25 * fade(0.05, 0.35, t);
+      ctx.translate(cx, cy - cell * 1.2); ctx.scale(sc, sc);
+      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell;
+      label(`LEVEL ${tr.level - 1} CLEAR`, 0, 0, cell * 1.15, '#fff', 'center', 800);
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha = a1 * fade(0.25, 0.5, t);
+      const rows = [[`消除 ${tr.lines} 行`, `+${tr.score.toLocaleString()} 分`], [`用時 ${tr.time}`, `最大連擊 ${Math.max(0, tr.combo)}`]];
+      rows.forEach(([l, r], i) => {
+        label(l, cx - cell * 0.4, cy + cell * (0.6 + i * 1.1), cell * 0.62, 'rgba(220,228,255,0.9)', 'right', 600);
+        label(r, cx + cell * 0.4, cy + cell * (0.6 + i * 1.1), cell * 0.62, 'rgba(220,228,255,0.9)', 'left', 600);
+      });
+      ctx.restore();
+    }
+    // 2. 新場景標題
+    const a2 = fade(1.2, 1.6, t) * (1 - fade(2.75, 3.0, t));
+    if (a2 > 0) {
+      const th = THEMES[tr.to];
+      ctx.save(); ctx.globalAlpha = a2;
+      label(`STAGE ${tr.level}`, cx, cy - cell * 2.6, cell * 0.55, rgb(accent), 'center', 700);
+      const k = fade(1.2, 2.2, t);
+      ctx.save();
+      ctx.translate(cx, cy - cell * 0.6);
+      ctx.scale(1.12 - 0.12 * k, 1.12 - 0.12 * k);
+      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell * 1.2;
+      const size = th.name.length > 2 ? cell * 1.9 : cell * 2.6;
+      ctx.font = `700 ${size}px ${SERIF}`;
+      if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(cell * 0.35 * (1 - k * 0.5))}px`;
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(th.name, 0, 0);
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+      ctx.restore();
+      const lw = cell * 7 * fade(1.4, 2.0, t);
+      const gr = ctx.createLinearGradient(cx - lw / 2, 0, cx + lw / 2, 0);
+      gr.addColorStop(0, rgb(accent, 0)); gr.addColorStop(0.5, rgb(accent, 0.9)); gr.addColorStop(1, rgb(accent, 0));
+      ctx.fillStyle = gr; ctx.fillRect(cx - lw / 2, cy + cell * 0.9, lw, 2);
+      ctx.globalAlpha = a2 * fade(1.6, 2.1, t);
+      ctx.font = `500 ${cell * 0.7}px ${SERIF}`;
+      ctx.fillStyle = 'rgba(235,238,255,0.92)';
+      ctx.fillText(th.sub, cx, cy + cell * 1.8);
+      ctx.restore();
+    }
+    // 3. READY
+    const a3 = fade(2.8, 2.95, t) * (1 - fade(3.25, 3.4, t));
+    if (a3 > 0) {
+      ctx.save(); ctx.globalAlpha = a3;
+      ctx.shadowColor = rgb(accent); ctx.shadowBlur = cell;
+      label('READY', cx, cy, cell * 1.4, '#fff', 'center', 800);
+      ctx.restore();
+    }
+  }
+
   function finishGame() {
     const g = game;
     const best = getBest();
@@ -722,6 +843,7 @@
     drawEffects();
     drawHud();
     if (mode === 'countdown') drawCountdown();
+    if (tr && (mode === 'transition' || mode === 'paused')) drawTransition();
     if (mode === 'over') {
       ctx.fillStyle = `rgba(30,0,10,${overFade * 0.55})`;
       ctx.fillRect(bx, by, cell * 10, cell * VIS);
@@ -732,6 +854,13 @@
   // ================= 主迴圈 =================
   let last = performance.now();
   let perfAcc = 0, perfN = 0;
+  // 淺色場景（水墨）光暈要壓低，避免白紙過曝
+  function bloomScale() {
+    const s1 = scene && scene.bloomScale != null ? scene.bloomScale : 1;
+    if (!prevScene || sceneFade >= 1) return s1;
+    const s0 = prevScene.bloomScale != null ? prevScene.bloomScale : 1;
+    return s0 + (s1 - s0) * sceneFade;
+  }
   function frame(ts) {
     requestAnimationFrame(frame);
     const dt = Math.min(50, ts - last); last = ts;
@@ -741,6 +870,8 @@
       if (countdown <= 0) { mode = 'playing'; Snd.play('go'); }
     } else if (mode === 'playing') {
       game.update(dt);
+    } else if (mode === 'transition') {
+      updateTransition(dt);
     } else if (mode === 'over') {
       overDelay -= dt / 1000;
       if (overDelay <= 0 && !overShown) { overShown = true; finishGame(); }
@@ -762,7 +893,7 @@
     }
     if (post) {
       const ok = post.render(canvas, {
-        bloom: 0.45 + beat * 0.25 + fx.pulse * 0.45,
+        bloom: (0.45 + beat * 0.25 + fx.pulse * 0.45) * bloomScale(),
         thr: 0.68,
         aberr: fx.aberr,
         vig: 0.45,
@@ -814,7 +945,9 @@
     mkSlider('軟降速度', 'sdf', 5, 40, 1, (v) => (v >= 40 ? '瞬間' : `${v}×`));
     mkSlider('音樂音量', 'music', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSlider('音效音量', 'sfx', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
-    mkSlider('起始等級', 'startLevel', 1, 15, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
+    mkSeg('難度曲線（下一局生效）', 'difficulty', [['relaxed', '輕鬆'], ['normal', '標準'], ['classic', '經典']]);
+    mkSeg('過關過場', 'transitions', [[true, '開'], [false, '關']]);
+    mkSlider('起始等級', 'startLevel', 1, 16, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
     mkSlider('硬降鍵與 ◀ 的距離', 'hdGap', 16, 96, 2, (v) => `${v} px`);

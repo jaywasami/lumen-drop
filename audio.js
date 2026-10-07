@@ -11,11 +11,13 @@
     minor: [0, 2, 3, 5, 7, 8, 10],
     dorian: [0, 2, 3, 5, 7, 9, 10],
     lydian: [0, 2, 4, 6, 7, 9, 11],
+    gong: [0, 2, 4, 7, 9], // 五聲音階：宮調
+    zhi: [0, 2, 5, 7, 9], // 五聲音階：徵調
   };
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
   // 鼓組各聲部最早出現的階段
-  const DRUM_STAGE = { kick: 2, kickSoft: 2, tom: 2, hat: 2, shaker: 2, snare: 3, clap: 3, rim: 3, ohat: 3 };
+  const DRUM_STAGE = { kick: 2, kickSoft: 2, tom: 2, hat: 2, shaker: 2, tanggu: 2, woodblock: 2, snare: 3, clap: 3, rim: 3, ohat: 3, cymbal: 3 };
 
   // ================= 曲目 =================
   // prog：每小節和弦根音（音階級數，0 起算）
@@ -57,6 +59,17 @@
       ],
     },
     {
+      name: '水墨', bpm: 76, vol: 0.72, root: 62, scale: 'gong', prog: [0, 4, 3, 1], sevenths: false, gong: true,
+      pad: 'warm', arp: 'zheng', bass: 'round', lead: 'dizi', arpOct: 0, bassOct: -2, leadOct: 1, wet: 1.3,
+      arpSeq: [0, -1, 1, -1, 2, -1, 3, -1, 4, -1, 3, -1, 2, -1, 1, -1],
+      bassSeq: 'R-------5-------',
+      drums: { tanggu: 'x.......x.......', woodblock: '....x.......x.x.' },
+      leadSeq: [
+        [[0, 4, 6], [6, 3, 2], [8, 2, 4], [12, 1, 4], [16, 2, 6], [22, 1, 2], [24, 0, 8]],
+        [[0, 5, 4], [4, 6, 4], [8, 7, 6], [14, 6, 2], [16, 5, 4], [20, 4, 4], [24, 3, 8]],
+      ],
+    },
+    {
       name: '霓虹都市', bpm: 116, root: 53, scale: 'minor', prog: [0, 5, 2, 6], sevenths: false, pump: true,
       pad: 'saw', arp: 'pluck', bass: 'saw', lead: 'saw', arpOct: 1, bassOct: -1, leadOct: 1, wet: 0.9,
       arpSeq: [0, 2, 4, 2, 1, 3, 4, 3, 0, 2, 4, 6, 5, 4, 2, 1],
@@ -79,6 +92,17 @@
       ],
     },
     {
+      name: '燈節', bpm: 118, vol: 0.72, root: 55, scale: 'zhi', prog: [0, 3, 1, 4], sevenths: false, gong: true,
+      pad: 'saw', arp: 'pipa', bass: 'round', lead: 'erhu', arpOct: 1, bassOct: -1, leadOct: 1, wet: 0.9,
+      arpSeq: [0, 1, 2, 1, 3, 2, 1, 0, 0, 2, 4, 2, 3, 1, 2, 1],
+      bassSeq: 'R-R-5-R-R-R-5-O-',
+      drums: { tanggu: 'x...x...x.x.x...', woodblock: '..x...x...x...x.', cymbal: '....x.......x...' },
+      leadSeq: [
+        [[0, 5, 3], [3, 4, 1], [4, 3, 4], [8, 2, 4], [12, 3, 2], [14, 4, 2], [16, 5, 6], [22, 7, 2], [24, 6, 8]],
+        [[0, 7, 4], [4, 6, 2], [6, 5, 2], [8, 4, 6], [14, 3, 2], [16, 2, 4], [20, 1, 4], [24, 0, 8]],
+      ],
+    },
+    {
       name: '夕陽雲海', bpm: 112, root: 58, scale: 'major', prog: [1, 4, 0, 5], sevenths: true, pump: true, swing: 0.1,
       pad: 'stab', padSeq: '..x...x...x...x.', arp: 'pluck', bass: 'saw', lead: 'soft', arpOct: 1, bassOct: -2, leadOct: 1, wet: 0.9,
       arpSeq: [0, -1, -1, 2, -1, -1, 4, -1, -1, 3, -1, -1, 5, -1, -1, -1],
@@ -93,8 +117,9 @@
 
   function degToMidi(song, deg, oct) {
     const s = SCALES[song.scale];
-    const o = Math.floor(deg / 7);
-    const d = ((deg % 7) + 7) % 7;
+    const n = s.length;
+    const o = Math.floor(deg / n);
+    const d = ((deg % n) + n) % n;
     return song.root + s[d] + 12 * (o + (oct || 0));
   }
   function chordMidis(song, rootDeg, oct, size) {
@@ -318,6 +343,8 @@
         drop: { waves: [['sine', 0, 1]], pitchFrom: 0.6, glide: 0.05, d: 0.28, peak: 0.1, wet: 0.7 },
         glass: { waves: [['triangle', 0, 0.6], ['sine', 0, 0.3, 2]], d: 0.6, peak: 0.07, wet: 0.55 },
         koto: { waves: [['triangle', 0, 0.7], ['sawtooth', 0, 0.15]], cut: 2400, cutEnv: 2.5, cutTime: 0.2, pitchFrom: 1.025, glide: 0.06, d: 0.75, peak: 0.08, wet: 0.4 },
+        zheng: { waves: [['triangle', 0, 0.65], ['sawtooth', 0, 0.18], ['sine', 0, 0.2, 2]], cut: 3000, cutEnv: 2, cutTime: 0.25, pitchFrom: 0.985, glide: 0.07, d: 1.4, peak: 0.085, wet: 0.5 },
+        pipa: { waves: [['triangle', 0, 0.6], ['sawtooth', 0, 0.25]], cut: 3500, cutEnv: 1.8, cutTime: 0.08, d: 0.35, peak: 0.075, wet: 0.35 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f, peak: P.peak * v, out }));
     },
@@ -338,9 +365,11 @@
         saw: { waves: [['sawtooth', -6, 0.4], ['sawtooth', 6, 0.4]], cut: 2200, a: 0.02, s: 0.7, r: 0.25, vib: [5.5, 0.005], peak: 0.045, wet: 0.5 },
         flute: { waves: [['sine', 0, 0.8], ['triangle', 0, 0.15, 2]], a: 0.07, s: 0.8, r: 0.3, vib: [4.5, 0.007], peak: 0.08, wet: 0.6 },
         whale: { waves: [['sine', 0, 1], ['triangle', 0, 0.2]], pitchFrom: 0.94, glide: 0.35, a: 0.35, s: 0.85, r: 1.2, vib: [3, 0.01], peak: 0.07, wet: 0.85 },
+        dizi: { waves: [['sine', 0, 0.85], ['triangle', 0, 0.12, 2]], pitchFrom: 1.06, glide: 0.07, a: 0.05, s: 0.8, r: 0.25, vib: [5.5, 0.008], peak: 0.085, wet: 0.55 },
+        erhu: { waves: [['sawtooth', -4, 0.45], ['sawtooth', 4, 0.35]], cut: 1700, q: 1.2, pitchFrom: 0.955, glide: 0.14, a: 0.08, s: 0.85, r: 0.3, vib: [6, 0.011], peak: 0.05, wet: 0.5 },
       }[timbre];
       this.synth(Object.assign({}, P, { t, f, dur, out, peak: P.peak * (vel || 1) }));
-      if (timbre === 'flute') this.noise({ t, ftype: 'bandpass', freq: f * 2, q: 3, a: 0.05, d: Math.min(dur, 0.4), peak: 0.012, out });
+      if (timbre === 'flute' || timbre === 'dizi') this.noise({ t, ftype: 'bandpass', freq: f * 2, q: 3, a: 0.05, d: Math.min(dur, 0.4), peak: 0.012, out });
     },
 
     drum(kind, t, vel, out) {
@@ -376,6 +405,24 @@
           this.synth({ t, f: 72, pitchFrom: 1.7, glide: 0.1, waves: [['sine', 0, 1]], d: 0.55, peak: 0.5 * v, out, wet: 0.25 });
           this.noise({ t, ftype: 'lowpass', freq: 700, d: 0.09, peak: 0.12 * v, out });
           break;
+        case 'woodblock':
+          this.synth({ t, f: 880, pitchFrom: 1.1, glide: 0.02, waves: [['sine', 0, 1]], d: 0.06, peak: 0.2 * v, out, wet: 0.2 });
+          this.noise({ t, ftype: 'bandpass', freq: 1800, q: 6, d: 0.02, peak: 0.06 * v, out });
+          break;
+        case 'tanggu':
+          this.synth({ t, f: 60, pitchFrom: 1.8, glide: 0.12, waves: [['sine', 0, 1]], d: 0.6, peak: 0.6 * v, out, wet: 0.25 });
+          this.noise({ t, ftype: 'lowpass', freq: 400, d: 0.12, peak: 0.15 * v, out });
+          break;
+        case 'cymbal':
+          this.noise({ t, freq: 4500, d: 0.45, peak: 0.08 * v, out, wet: 0.3 });
+          this.noise({ t, ftype: 'bandpass', freq: 7000, q: 3, d: 0.2, peak: 0.05 * v, out });
+          break;
+        case 'gong':
+          [[1, 0.09], [1.48, 0.05], [2.03, 0.04], [2.74, 0.025]].forEach(([r, pk]) => {
+            this.synth({ t, f: 98 * r, pitchFrom: 1.02, glide: 0.5, waves: [['sine', 0, 1]], a: 0.02, d: 3.5, peak: pk * v, out, wet: 0.7 });
+          });
+          this.noise({ t, ftype: 'lowpass', freq: 800, d: 0.4, peak: 0.05 * v, out });
+          break;
         case 'crash':
           this.noise({ t, freq: 3200, d: 1.7, peak: 0.1 * v, out, wet: 0.45 });
           break;
@@ -393,9 +440,9 @@
       p.fadeDry = c.createGain(); p.fadeWet = c.createGain();
       p.fadeDry.gain.value = 0.0001; p.fadeWet.gain.value = 0.0001;
       p.fadeDry.gain.setValueAtTime(0.0001, startAt);
-      p.fadeDry.gain.exponentialRampToValueAtTime(1, startAt + 0.6);
+      p.fadeDry.gain.exponentialRampToValueAtTime(song.vol || 1, startAt + 0.6);
       p.fadeWet.gain.setValueAtTime(0.0001, startAt);
-      p.fadeWet.gain.exponentialRampToValueAtTime(song.wet || 1, startAt + 0.6);
+      p.fadeWet.gain.exponentialRampToValueAtTime((song.wet || 1) * (song.vol || 1), startAt + 0.6);
       p.fadeDry.connect(this.musicBus); p.fadeWet.connect(this.musicWet);
       p.duck = c.createGain(); p.duck.connect(p.fadeDry);
       p.duckWet = c.createGain(); p.duckWet.connect(p.fadeWet);
@@ -538,7 +585,7 @@
         if (ch !== '.' && ch !== '-') {
           let len = 1;
           while (s16 + len < 16 && song.bassSeq[s16 + len] === '-') len++;
-          const off = { R: 0, 5: 4, 3: 2, O: 7 }[ch] || 0;
+          const off = (SCALES[song.scale].length === 5 ? { R: 0, 5: 3, 3: 2, O: 5 } : { R: 0, 5: 4, 3: 2, O: 7 })[ch] || 0;
           this.bassNote(t, degToMidi(song, deg + off, song.bassOct), p.stepDur * len * 0.95, song.bass, out);
         }
       }
@@ -557,6 +604,7 @@
           }
         }
       }
+      if (song.gong && stage >= 3 && s16 === 0 && bar % 4 === 0) this.drum('gong', t, 1, p.outDrum);
       // 高潮層：16 分音符鼓點、每 4 小節一記鈸、大鼓推進
       if (hot && stage >= 2) {
         const hatOn = song.drums.hat && song.drums.hat[s16] !== '.';
