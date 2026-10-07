@@ -1,6 +1,6 @@
 'use strict';
 /*
- * 光律方塊 — WebGL 後製
+ * 狗狗哇沙米光律方塊 — WebGL 後製
  * 把 2D 畫面當成貼圖：泛光（bloom，兩層模糊）、衝擊波扭曲、色差、暗角
  */
 (function (root) {

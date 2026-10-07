@@ -1,5 +1,5 @@
 'use strict';
-/* 光律方塊 — 介面、渲染、特效、場景、設定 */
+/* 狗狗哇沙米光律方塊 — 介面、渲染、特效、場景、設定 */
 (function () {
   const E = window.Engine;
   const Snd = window.LumenAudio;

@@ -28,7 +28,7 @@ html, body {
   display: flex; flex-direction: column; gap: 12px; text-align: center; touch-action: pan-y;
 }
 .panel.wide { width: min(460px, 100%); }
-h1 { margin: 0; font-size: 44px; letter-spacing: 6px; text-shadow: 0 0 20px var(--accent); }
+h1 { margin: 0; font-size: clamp(24px, 7.4vw, 31px); letter-spacing: 2px; white-space: nowrap; text-shadow: 0 0 20px var(--accent); }
 h2 { margin: 0 0 4px; font-size: 26px; letter-spacing: 3px; }
 h3 { margin: 14px 0 4px; font-size: 15px; color: var(--accent); }
 .sub { margin: -8px 0 0; color: var(--dim); letter-spacing: 8px; font-size: 12px; }

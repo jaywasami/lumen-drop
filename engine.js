@@ -1,6 +1,6 @@
 'use strict';
 /*
- * 光律方塊 — 遊戲核心邏輯（無 DOM，可在 Node 測試）
+ * 狗狗哇沙米光律方塊 — 遊戲核心邏輯（無 DOM，可在 Node 測試）
  * SRS 旋轉 / wall kick、7-bag、DAS/ARR、鎖定延遲、T-Spin、Combo、B2B、Perfect Clear
  */
 (function (root) {

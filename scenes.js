@@ -1,6 +1,6 @@
 'use strict';
 /*
- * 光律方塊 — 動態場景
+ * 狗狗哇沙米光律方塊 — 動態場景
  * 每個場景：resize(w, h) 預先畫好靜態層、update(dt) 推進動畫、draw(g, t, beat, board) 繪製、burst(d, board) 消行反應
  * beat：0~1 的節拍脈衝（拍點時最大）
  */
