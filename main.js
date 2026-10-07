@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.07-1';
+  const VERSION = '2026.10.07-2';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -678,6 +678,7 @@
     ensureAudio();
     input.releaseAll();
     const lv = versus ? 1 : Math.max(1, Math.min(THEMES.length, settings.startLevel | 0));
+    if (!versus) newSoloOrder();
     const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
     game = versus
       ? new E.Game({ seed: opts.seed, settings: vsGameSettings(), onEvent: onGameEvent })
@@ -1219,9 +1220,17 @@
     label(msg, cx, cy + cell * 5.6, cell * 0.5, 'rgba(220,228,255,0.85)', 'center', 600);
   }
 
+  // 單機：每局隨機洗牌場景順序，而且第一關不會和上一局一樣
+  let soloOrder = null, lastFirstTheme = -1;
+  function newSoloOrder() {
+    soloOrder = shuffledThemes((Math.random() * 4294967296) >>> 0);
+    if (soloOrder[0] === lastFirstTheme) [soloOrder[0], soloOrder[1]] = [soloOrder[1], soloOrder[0]];
+    lastFirstTheme = soloOrder[0];
+  }
   function themeFor(level) {
     const i = (level - 1) % THEMES.length;
-    return vs && vs.themeOrder ? vs.themeOrder[i] : i;
+    const order = vs ? vs.themeOrder : soloOrder;
+    return order ? order[i] : i;
   }
 
   // ================= 過關過場 =================
@@ -1824,7 +1833,7 @@
       row.append(lab, seg); body.append(row);
     }
     mkSlider('按鍵整體大小', 'btnScale', 0.7, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`);
-    mkSlider('起始等級', 'startLevel', 1, THEMES.length, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
+    mkSlider('起始等級（速度）', 'startLevel', 1, THEMES.length, 1, (v) => `${v}`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
     mkSlider('硬降鍵與 ◀ 的距離', 'hdGap', 16, 96, 2, (v) => `${v} px`);
@@ -1980,6 +1989,6 @@
   // 供自動測試使用
   window.__lumen = {
     get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings, get vs() { return vs; }, startCpu,
-    setTheme: (i) => { setTheme(i, true); }, get themeIdx() { return themeIdx; }, get post() { return post; },
+    setTheme: (i) => { setTheme(i, true); }, themes: THEMES, get themeIdx() { return themeIdx; }, get post() { return post; },
   };
 })();

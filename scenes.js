@@ -1968,83 +1968,174 @@
   // 長城：日出、層層山脊與雲霧、蜿蜒城牆與烽火台、人字雁陣
   // =========================================================
   class GreatWall {
-    constructor(low) { this.low = low; this.flash = 0; }
+    constructor(low) { this.low = low; this.flash = 0; this.fires = []; this.smoke = []; }
     resize(w, h) {
       this.w = w; this.h = h;
       const sc = (this.sc = Math.min(w, h) / 412);
       const L = (this.bg = layer(w, h));
       const g = L.g;
-      g.fillStyle = vgrad(g, h, [[0, '#1b2350'], [0.3, '#5a4f86'], [0.5, '#e08a6a'], [0.6, '#ffc98a'], [1, '#3a3050']]);
+      // 黃昏天空：上深藍、中段紫、地平線金橘
+      g.fillStyle = vgrad(g, h, [[0, '#0e1638'], [0.22, '#2b2a5e'], [0.42, '#7a4a78'], [0.55, '#e0805a'], [0.63, '#ffc277'], [0.7, '#f39a5a'], [1, '#2a1622']]);
       g.fillRect(0, 0, w, h);
-      this.sun = { x: w * 0.68, y: h * 0.5, r: 30 * sc };
-      glow(g, this.sun.x, this.sun.y, w * 0.9, '255,190,120', 0.45);
-      glow(g, this.sun.x, this.sun.y, this.sun.r * 3, '255,240,200', 0.6);
-      g.fillStyle = '#fff4d8'; g.beginPath(); g.arc(this.sun.x, this.sun.y, this.sun.r, 0, TAU); g.fill();
-      const ridge = (base, amp, seed) => {
+      for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(255,240,220,${rand(0.1, 0.5)})`; g.fillRect(rand(0, w), rand(0, h * 0.25), 1, 1); }
+      // 落日在右側地平線，光暈很大
+      this.sun = { x: w * 0.78, y: h * 0.6, r: 24 * sc };
+      glow(g, this.sun.x, this.sun.y, w * 1.1, '255,160,90', 0.32);
+      glow(g, this.sun.x, this.sun.y, this.sun.r * 4, '255,235,190', 0.45);
+      g.fillStyle = '#fff2cf'; g.beginPath(); g.arc(this.sun.x, this.sun.y, this.sun.r, 0, TAU); g.fill();
+      // 雲帶：底部被夕陽照亮的長條雲
+      for (let i = 0; i < 9; i++) {
+        const cy = h * rand(0.08, 0.48), cx = rand(-0.1, 1.1) * w, cw = rand(120, 260) * sc, ch = rand(5, 11) * sc;
+        const lit = 1 - Math.abs(cy / h - 0.5) * 1.5;
+        const cg = g.createLinearGradient(0, cy - ch, 0, cy + ch);
+        cg.addColorStop(0, `rgba(60,45,90,${0.55})`); cg.addColorStop(0.6, `rgba(120,70,110,0.5)`); cg.addColorStop(1, `rgba(255,${(150 + lit * 60) | 0},110,${0.35 + lit * 0.4})`);
+        g.fillStyle = cg;
+        g.beginPath(); g.ellipse(cx, cy, cw, ch, 0, 0, TAU); g.fill();
+        g.beginPath(); g.ellipse(cx + cw * 0.3, cy - ch * 0.6, cw * 0.5, ch * 0.8, 0, 0, TAU); g.fill();
+      }
+      // 崎嶇山脊：多層正弦 + 隨機起伏
+      const ridge = (base, amp, seed, rough) => {
+        const ph = [rand(0, TAU), rand(0, TAU), rand(0, TAU), rand(0, TAU)];
         const pts = [];
-        for (let x = -20; x <= w + 20; x += 6) pts.push([x, base - amp * (0.6 * Math.abs(Math.sin(x * 0.0055 + seed)) + 0.4 * Math.abs(Math.sin(x * 0.017 + seed * 2.3)))]);
+        for (let x = -20; x <= w + 20; x += 4) {
+          let y = Math.sin(x * 0.006 + ph[0]) * 0.5 + Math.sin(x * 0.013 + ph[1]) * 0.3 + Math.sin(x * 0.031 + ph[2]) * 0.14 * rough + Math.sin(x * 0.07 + ph[3]) * 0.06 * rough;
+          pts.push([x, base - amp * (0.55 + y * 0.7)]);
+        }
         return pts;
       };
-      const fill = (pts, top, bot, base) => {
-        const gr = g.createLinearGradient(0, Math.min(...pts.map((p) => p[1])), 0, base + h * 0.15);
+      const mount = (pts, top, bot, base, shade) => {
+        const gr = g.createLinearGradient(0, Math.min(...pts.map((p) => p[1])), 0, base + h * 0.1);
         gr.addColorStop(0, top); gr.addColorStop(1, bot);
         g.fillStyle = gr;
         g.beginPath(); g.moveTo(-20, h); for (const [x, y] of pts) g.lineTo(x, y); g.lineTo(w + 20, h); g.closePath(); g.fill();
-      };
-      // 城牆：沿著山脊走、上緣有垛口，向陽面受光
-      const wall = (pts, thick, lit, dark, towers) => {
-        g.lineJoin = 'round';
-        g.strokeStyle = dark; g.lineWidth = thick;
-        g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y - thick * 0.4) : g.moveTo(x, y - thick * 0.4))); g.stroke();
-        g.strokeStyle = lit; g.lineWidth = thick * 0.35;
-        g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y - thick * 0.75) : g.moveTo(x, y - thick * 0.75))); g.stroke();
-        g.fillStyle = dark;
-        for (let i = 0; i < pts.length; i += 2) { const [x, y] = pts[i]; g.fillRect(x - thick * 0.18, y - thick * 1.25, thick * 0.36, thick * 0.4); }
-        // 烽火台：放在局部最高點
-        for (let i = 3; i < pts.length - 3; i++) {
-          const [x, y] = pts[i];
-          if (y < pts[i - 3][1] && y < pts[i + 3][1] && Math.random() < towers) {
-            const tw = thick * 2.2, th = thick * 2.4;
-            g.fillStyle = dark; g.fillRect(x - tw / 2, y - th - thick * 0.6, tw, th);
-            g.fillStyle = lit; g.fillRect(x - tw / 2, y - th - thick * 0.6, tw * 0.35, th);
-            g.fillStyle = dark;
-            for (let k = 0; k < 4; k++) g.fillRect(x - tw / 2 + k * tw / 3.4, y - th - thick * 1.05, tw / 6, thick * 0.45);
-            g.fillStyle = 'rgba(20,10,10,0.8)'; g.fillRect(x - tw * 0.12, y - th * 0.75, tw * 0.24, th * 0.35);
+        // 背光面：坡往右下的地方加深，做出山體立體感
+        if (shade) {
+          g.fillStyle = shade;
+          for (let i = 1; i < pts.length; i++) {
+            const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+            if (y1 > y0) { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.lineTo(x1 + (y1 - y0) * 3, base + h * 0.06); g.lineTo(x0 + (y1 - y0) * 3, base + h * 0.06); g.fill(); }
           }
         }
+        // 向陽稜線
+        g.strokeStyle = 'rgba(255,190,130,0.35)'; g.lineWidth = 1;
+        g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
       };
-      const r1 = ridge(h * 0.6, h * 0.12, 1.1);
-      fill(r1, 'rgba(110,100,150,0.75)', 'rgba(200,150,150,0.2)', h * 0.6);
-      wall(r1, 4 * sc, 'rgba(240,190,160,0.75)', 'rgba(80,65,100,0.9)', 0.5);
-      for (let i = 0; i < 3; i++) glow(g, rand(0, w), h * rand(0.62, 0.7), w * 0.45, '255,220,200', 0.3);
-      const r2 = ridge(h * 0.74, h * 0.13, 3.7);
-      fill(r2, 'rgba(70,55,90,0.92)', 'rgba(140,90,110,0.5)', h * 0.74);
-      wall(r2, 7 * sc, 'rgba(255,190,140,0.85)', 'rgba(45,32,55,1)', 0.6);
-      for (let i = 0; i < 3; i++) glow(g, rand(0, w), h * rand(0.78, 0.85), w * 0.5, '255,210,200', 0.25);
-      const r3 = ridge(h * 0.92, h * 0.1, 6.2);
-      fill(r3, 'rgba(35,25,45,1)', 'rgba(25,18,32,1)', h * 0.92);
+      const mist = (y, a) => {
+        const mg = g.createLinearGradient(0, y - h * 0.04, 0, y + h * 0.04);
+        mg.addColorStop(0, 'rgba(255,200,170,0)'); mg.addColorStop(0.5, `rgba(255,200,170,${a})`); mg.addColorStop(1, 'rgba(255,200,170,0)');
+        g.fillStyle = mg; g.fillRect(0, y - h * 0.04, w, h * 0.08);
+      };
+      this.towers = [];
+      // 城牆：側面陰影 + 向陽頂面 + 垛口 + 敵樓
+      const wall = (pts, thick, lit, face, dark, towerEvery, depth) => {
+        const top = pts.map(([x, y]) => [x, y - thick * 0.9]);
+        // 牆身（側面）
+        const fg = g.createLinearGradient(0, Math.min(...top.map((p) => p[1])), 0, Math.max(...pts.map((p) => p[1])) + thick);
+        fg.addColorStop(0, face); fg.addColorStop(1, dark);
+        g.fillStyle = fg;
+        g.beginPath(); top.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+        for (let i = pts.length - 1; i >= 0; i--) g.lineTo(pts[i][0], pts[i][1] + thick * 0.4);
+        g.fill();
+        // 磚縫
+        if (thick > 8 * sc) {
+          g.strokeStyle = 'rgba(40,20,20,0.25)'; g.lineWidth = 0.7;
+          for (let k = 1; k < 4; k++) { g.beginPath(); top.forEach(([x, y], i) => (i ? g.lineTo(x, y + thick * 0.3 * k) : g.moveTo(x, y + thick * 0.3 * k))); g.stroke(); }
+        }
+        // 頂面走道
+        g.strokeStyle = lit; g.lineWidth = Math.max(1.2, thick * 0.28); g.lineJoin = 'round';
+        g.beginPath(); top.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+        // 垛口
+        let acc = 0;
+        const step = Math.max(2.5, thick * 0.55);
+        for (let i = 1; i < top.length; i++) {
+          const [x0, y0] = top[i - 1], [x1, y1] = top[i];
+          acc += Math.hypot(x1 - x0, y1 - y0);
+          if (acc >= step) {
+            acc = 0;
+            g.fillStyle = face; g.fillRect(x1 - thick * 0.16, y1 - thick * 0.42, thick * 0.32, thick * 0.42);
+            g.fillStyle = lit; g.fillRect(x1 - thick * 0.16, y1 - thick * 0.42, thick * 0.1, thick * 0.42);
+          }
+        }
+        // 敵樓：放在局部高點附近
+        let last = -999;
+        for (let i = 4; i < pts.length - 4; i++) {
+          const [x, y] = top[i];
+          if (x < 0 || x > w) continue;
+          if (x - last < towerEvery) continue;
+          if (!(y <= top[i - 4][1] && y <= top[i + 4][1])) continue;
+          last = x;
+          const tw = thick * 2.6, th = thick * 2.2;
+          const tx = x - tw / 2, ty = y - th;
+          g.fillStyle = face; g.fillRect(tx, ty, tw, th + thick * 0.3);
+          g.fillStyle = dark; g.fillRect(tx + tw * 0.62, ty, tw * 0.38, th + thick * 0.3); // 背光側
+          g.fillStyle = lit; g.fillRect(tx, ty, tw, Math.max(1, thick * 0.18));
+          // 拱窗
+          g.fillStyle = 'rgba(25,10,15,0.9)';
+          for (const k of [0.22, 0.48]) { const ax = tx + tw * k, aw = tw * 0.13, ah = th * 0.36; g.beginPath(); g.moveTo(ax, ty + th * 0.75); g.lineTo(ax, ty + th * 0.75 - ah); g.arc(ax + aw / 2, ty + th * 0.75 - ah, aw / 2, Math.PI, 0); g.lineTo(ax + aw, ty + th * 0.75); g.fill(); }
+          // 頂上垛口 / 近處的樓閣屋頂
+          if (depth >= 2) {
+            g.fillStyle = dark;
+            g.beginPath(); g.moveTo(tx - tw * 0.15, ty); g.quadraticCurveTo(tx + tw * 0.1, ty - th * 0.05, tx + tw * 0.2, ty - th * 0.38); g.lineTo(tx + tw * 0.8, ty - th * 0.38); g.quadraticCurveTo(tx + tw * 0.9, ty - th * 0.05, tx + tw * 1.15, ty); g.fill();
+            g.strokeStyle = lit; g.lineWidth = 1; g.beginPath(); g.moveTo(tx - tw * 0.15, ty); g.quadraticCurveTo(tx + tw * 0.1, ty - th * 0.05, tx + tw * 0.2, ty - th * 0.38); g.stroke();
+          } else {
+            g.fillStyle = face;
+            for (let k = 0; k < 4; k++) g.fillRect(tx + k * tw / 3.3, ty - thick * 0.4, tw / 6, thick * 0.4);
+          }
+          this.towers.push({ x: x, y: ty - (depth >= 2 ? th * 0.38 : thick * 0.4), s: thick, depth });
+        }
+      };
+      const r0 = ridge(h * 0.6, h * 0.08, 1, 0.6);
+      mount(r0, 'rgba(120,80,120,0.85)', 'rgba(230,140,110,0.5)', h * 0.6);
+      wall(r0, 3.2 * sc, 'rgba(255,200,160,0.7)', 'rgba(110,70,100,1)', 'rgba(90,55,85,1)', 90 * sc, 0);
+      mist(h * 0.64, 0.22);
+      const r1 = ridge(h * 0.7, h * 0.14, 2, 1.5);
+      mount(r1, 'rgba(80,50,85,1)', 'rgba(120,62,80,1)', h * 0.7);
+      wall(r1, 7 * sc, 'rgba(255,190,140,0.85)', 'rgba(95,60,80,1)', 'rgba(55,32,52,1)', 110 * sc, 1);
+      mist(h * 0.75, 0.18);
+      const r2 = ridge(h * 0.83, h * 0.15, 3, 1.7);
+      mount(r2, 'rgba(48,28,50,1)', 'rgba(62,32,50,1)', h * 0.83);
+      wall(r2, 14 * sc, 'rgba(255,185,130,0.95)', 'rgba(110,70,75,1)', 'rgba(40,22,35,1)', 150 * sc, 2);
+      mist(h * 0.88, 0.1);
+      // 前景：深色山坡與松樹剪影
+      const r3 = ridge(h * 0.97, h * 0.08, 4, 1.5);
+      mount(r3, 'rgba(22,12,24,1)', 'rgba(12,6,14,1)', h * 0.97);
+      const pine = (x, y, s) => {
+        g.fillStyle = '#0d070f';
+        g.fillRect(x - s * 0.06, y - s * 0.3, s * 0.12, s * 0.3);
+        for (let k = 0; k < 4; k++) { const ww = s * (0.5 - k * 0.1), yy = y - s * 0.25 - k * s * 0.2; g.beginPath(); g.moveTo(x - ww, yy); g.lineTo(x, yy - s * 0.32); g.lineTo(x + ww, yy); g.fill(); }
+      };
+      for (let i = 0; i < r3.length; i += 3) if (Math.random() < 0.5) pine(r3[i][0], r3[i][1] + 4, rand(18, 34) * sc);
       // 光束素材
       const R = (this.ray = layer(60, 500));
       const rg = R.g.createLinearGradient(0, 0, 0, 500);
-      rg.addColorStop(0, 'rgba(255,230,180,0.5)'); rg.addColorStop(1, 'rgba(255,230,180,0)');
+      rg.addColorStop(0, 'rgba(255,220,160,0.55)'); rg.addColorStop(1, 'rgba(255,220,160,0)');
       R.g.fillStyle = rg; R.g.beginPath(); R.g.moveTo(28, 0); R.g.lineTo(32, 0); R.g.lineTo(60, 500); R.g.lineTo(0, 500); R.g.fill();
       this.geese = [];
-      const lead = { x: rand(0.1, 0.4) * w, y: h * rand(0.2, 0.32) };
       for (let i = 0; i < 9; i++) {
         const k = Math.ceil(i / 2) * (i % 2 ? 1 : -1);
-        this.geese.push({ dx: -Math.abs(k) * 16 * sc, dy: k * 9 * sc, ph: rand(0, TAU) });
+        this.geese.push({ dx: -Math.abs(k) * 15 * sc, dy: k * 8 * sc, ph: rand(0, TAU) });
       }
-      this.flock = { x: lead.x, y: lead.y, v: 18 * sc };
+      this.flock = { x: rand(0.1, 0.4) * w, y: h * rand(0.03, 0.07), v: 16 * sc };
       this.mists = [];
-      for (let i = 0; i < (this.low ? 3 : 5); i++) this.mists.push({ x: rand(0, w), y: h * rand(0.62, 0.9), r: w * rand(0.3, 0.5), v: rand(4, 10) });
+      for (let i = 0; i < (this.low ? 3 : 6); i++) this.mists.push({ x: rand(0, w), y: h * rand(0.64, 0.9), r: w * rand(0.25, 0.45), v: rand(4, 10) * sc });
+      // 每座敵樓一盞烽火：平時微弱，消行時點燃
+      this.fires = this.towers.map((tw) => ({ x: tw.x, y: tw.y, s: tw.s, depth: tw.depth, heat: 0.15, ph: rand(0, TAU) }));
+      this.smoke = [];
     }
     update(dt) {
       const s = dt / 1000;
       this.flash *= Math.pow(0.15, s);
       this.flock.x += this.flock.v * s * (1 + this.flash);
-      if (this.flock.x > this.w + 200 * this.sc) { this.flock.x = -60 * this.sc; this.flock.y = this.h * rand(0.15, 0.32); }
+      if (this.flock.x > this.w + 200 * this.sc) { this.flock.x = -60 * this.sc; this.flock.y = this.h * rand(0.02, 0.07); }
       for (const gs of this.geese) gs.ph += s * 6;
       for (const m of this.mists) { m.x += m.v * s; if (m.x - m.r > this.w) m.x = -m.r; }
+      for (const f of this.fires) {
+        f.heat = Math.max(0.15, f.heat - s * 0.12);
+        f.ph += s * 9;
+        if (f.heat > 0.4 && Math.random() < s * 6 * f.heat && this.smoke.length < (this.low ? 30 : 80)) this.smoke.push({ x: f.x, y: f.y - f.s, r: f.s * rand(0.6, 1), a: 0.35 * f.heat, vx: rand(4, 10) * this.sc, vy: -rand(10, 18) * this.sc * (0.5 + f.depth * 0.3), life: rand(2, 3.5), max: 3.5 });
+      }
+      for (const p of this.smoke) { p.life -= s; p.x += p.vx * s; p.y += p.vy * s; p.r += s * 5 * this.sc; }
+      this.smoke = this.smoke.filter((p) => p.life > 0);
     }
     draw(g, t, beat, B) {
       const w = this.w, h = this.h;
@@ -2052,17 +2143,29 @@
       g.globalCompositeOperation = 'lighter';
       g.save(); g.translate(this.sun.x, this.sun.y);
       for (let i = 0; i < 9; i++) {
-        g.save(); g.rotate(-Math.PI / 2 + (i - 4) * 0.28 + Math.sin(t / 3000 + i) * 0.03);
-        g.globalAlpha = (0.12 + beat * 0.06 + this.flash * 0.15) * (i % 2 ? 0.6 : 1);
+        g.save(); g.rotate(Math.PI / 2 + 0.55 + (i - 4) * 0.2 + Math.sin(t / 3000 + i) * 0.03);
+        g.globalAlpha = (0.08 + beat * 0.05 + this.flash * 0.12) * (i % 2 ? 0.6 : 1);
         g.drawImage(this.ray.cv, -30, 0, 60, h * 0.9);
         g.restore();
       }
       g.restore(); g.globalAlpha = 1;
-      for (const m of this.mists) glow(g, m.x, m.y, m.r, '255,225,210', 0.12);
+      for (const m of this.mists) glow(g, m.x, m.y, m.r, '255,210,190', 0.05);
+      // 烽火
+      for (const f of this.fires) {
+        const fl = f.heat * (0.8 + 0.2 * Math.sin(f.ph) + 0.1 * Math.sin(f.ph * 2.3));
+        glow(g, f.x, f.y - f.s * 0.6, f.s * (2.5 + fl * 2.5), '255,120,40', 0.22 * fl + beat * 0.03);
+        glow(g, f.x, f.y - f.s * 0.5, f.s * (0.6 + fl * 0.9), '255,220,140', 0.55 * fl);
+      }
       g.globalCompositeOperation = 'source-over';
+      for (const p of this.smoke) {
+        const k = p.life / p.max;
+        const sg = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+        sg.addColorStop(0, `rgba(120,100,110,${p.a * k * 0.6})`); sg.addColorStop(1, 'rgba(120,100,110,0)');
+        g.fillStyle = sg; g.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      }
       // 人字雁陣
-      g.fillStyle = 'rgba(40,25,45,0.85)';
-      const k = this.sc * 1.3;
+      g.fillStyle = 'rgba(30,20,40,0.85)';
+      const k = this.sc * 1.2;
       for (const gs of this.geese) {
         const x = this.flock.x + gs.dx, y = this.flock.y + gs.dy;
         const f = Math.sin(gs.ph) * 5 * k;
@@ -2070,10 +2173,15 @@
         g.moveTo(x - 9 * k, y - f); g.quadraticCurveTo(x - 4 * k, y - f * 0.3 - 1.5 * k, x, y);
         g.lineTo(x + 5 * k, y - 0.6 * k); g.lineTo(x, y + 1.2 * k);
         g.quadraticCurveTo(x - 4 * k, y - f * 0.2 + 1 * k, x - 9 * k, y - f); g.fill();
-        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x - 2 * k, y - f * 0.6, x + 2 * k, y - f * 1.1); g.lineTo(x + 2.5 * k, y); g.fill();
       }
     }
-    burst(d) { this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0)); }
+    burst(d) {
+      this.flash = Math.min(1.5, this.flash + 0.25 * d.lines + (d.lines >= 4 ? 0.5 : 0));
+      // 點燃烽火：消越多行點越多座，Tetris 全線點亮
+      const n = d.lines >= 4 ? this.fires.length : Math.min(this.fires.length, d.lines * 2);
+      const order = this.fires.slice().sort(() => Math.random() - 0.5);
+      for (let i = 0; i < n; i++) order[i].heat = Math.min(1.2, order[i].heat + 0.8 + (d.lines >= 4 ? 0.3 : 0));
+    }
   }
 
   // =========================================================
