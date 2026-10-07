@@ -117,6 +117,7 @@
     players: [],
     noiseBuf: null,
     sfxIdx: 0,
+    boost: 0,
     SONGS,
 
     init() {
@@ -151,8 +152,14 @@
       this.reverb.connect(ret);
       ret.connect(this.masterFilter);
 
-      this.musicBus = c.createGain(); this.musicBus.gain.value = this.musicVol; this.musicBus.connect(this.masterFilter);
-      this.musicWet = c.createGain(); this.musicWet.gain.value = this.musicVol; this.musicWet.connect(this.fxIn);
+      // 音色亮度：強度越高濾波越開，聽起來越亮越飽滿
+      this.musicTone = c.createBiquadFilter(); this.musicTone.type = 'lowpass'; this.musicTone.frequency.value = 2200; this.musicTone.Q.value = 0.8;
+      this.wetTone = c.createBiquadFilter(); this.wetTone.type = 'lowpass'; this.wetTone.frequency.value = 2200;
+      this.musicBus = c.createGain(); this.musicBus.gain.value = this.musicVol;
+      this.stageGain = c.createGain(); this.stageGain.gain.value = 0.8;
+      this.musicBus.connect(this.musicTone); this.musicTone.connect(this.stageGain); this.stageGain.connect(this.masterFilter);
+      this.musicWet = c.createGain(); this.musicWet.gain.value = this.musicVol;
+      this.musicWet.connect(this.wetTone); this.wetTone.connect(this.fxIn);
       this.sfxBus = c.createGain(); this.sfxBus.gain.value = this.sfxVol; this.sfxBus.connect(this.masterFilter);
       this.sfxWet = c.createGain(); this.sfxWet.gain.value = this.sfxVol * 0.8; this.sfxWet.connect(this.fxIn);
       this.sfxOut = { dry: this.sfxBus, wet: this.sfxWet };
@@ -324,7 +331,7 @@
       this.synth(Object.assign({}, P, { t, f: mtof(midi), dur, out, wet: 0.04 }));
     },
 
-    leadNote(t, midi, dur, timbre, out) {
+    leadNote(t, midi, dur, timbre, out, vel) {
       const f = mtof(midi);
       const P = {
         soft: { waves: [['triangle', 0, 0.7], ['sine', 0, 0.25, 2]], a: 0.03, s: 0.7, r: 0.35, vib: [5, 0.006], peak: 0.075, wet: 0.55 },
@@ -332,7 +339,7 @@
         flute: { waves: [['sine', 0, 0.8], ['triangle', 0, 0.15, 2]], a: 0.07, s: 0.8, r: 0.3, vib: [4.5, 0.007], peak: 0.08, wet: 0.6 },
         whale: { waves: [['sine', 0, 1], ['triangle', 0, 0.2]], pitchFrom: 0.94, glide: 0.35, a: 0.35, s: 0.85, r: 1.2, vib: [3, 0.01], peak: 0.07, wet: 0.85 },
       }[timbre];
-      this.synth(Object.assign({}, P, { t, f, dur, out }));
+      this.synth(Object.assign({}, P, { t, f, dur, out, peak: P.peak * (vel || 1) }));
       if (timbre === 'flute') this.noise({ t, ftype: 'bandpass', freq: f * 2, q: 3, a: 0.05, d: Math.min(dur, 0.4), peak: 0.012, out });
     },
 
@@ -376,12 +383,12 @@
     },
 
     // ---------- 播放器 ----------
-    makePlayer(idx, startAt, stage) {
+    makePlayer(idx, startAt, stage, rate) {
       const c = this.ctx;
       const song = SONGS[idx];
       const p = {
-        idx, song, step: 0, start: startAt, next: startAt, stage: stage || 0, stageTarget: stage || 0,
-        stepDur: 60 / song.bpm / 4, chords: [], stopping: false, dead: false,
+        idx, song, step: 0, start: startAt, next: startAt, stage: stage || 0, stageTarget: stage || 0, rate: rate || 1,
+        stepDur: 60 / (song.bpm * (rate || 1)) / 4, chords: [], stopping: false, dead: false,
       };
       p.fadeDry = c.createGain(); p.fadeWet = c.createGain();
       p.fadeDry.gain.value = 0.0001; p.fadeWet.gain.value = 0.0001;
@@ -402,11 +409,12 @@
       return null;
     },
 
-    playSong(idx, stage) {
+    playSong(idx, stage, rate) {
       this.init();
       if (!this.ctx) return;
+      rate = rate || 1;
       const cur = this.current();
-      if (cur && cur.idx === idx) { this.setStage(stage || 0); return; }
+      if (cur && cur.idx === idx && cur.rate === rate) { this.setStage(stage || 0); return; }
       const now = this.ctx.currentTime;
       let startAt = now + 0.08;
       if (cur && now >= cur.start) {
@@ -422,8 +430,9 @@
       } else if (cur) {
         this.fadeOut(cur, now, 0.3);
       }
-      const p = this.makePlayer(idx, startAt, stage);
+      const p = this.makePlayer(idx, startAt, stage, rate);
       this.players.push(p);
+      this.applyTone(stage || 0, startAt);
       this.delay.delayTime.setTargetAtTime(p.stepDur * 3, startAt, 0.05); // 附點八分
     },
 
@@ -446,7 +455,30 @@
 
     setStage(s) {
       const p = this.current();
-      if (p) p.stageTarget = Math.max(0, Math.min(4, s));
+      if (!p) return;
+      p.stageTarget = Math.max(0, Math.min(5, s));
+      this.applyTone(p.stageTarget);
+    },
+
+    // Combo 期間的即時加強（0 = 無）
+    setBoost(n) {
+      this.boost = n || 0;
+      const p = this.current();
+      this.applyTone(p ? p.stageTarget : 0);
+    },
+
+    applyTone(stage, at) {
+      if (!this.ctx) return;
+      const f = this.boost >= 2 ? 20000 : [2200, 3400, 5500, 9000, 15000, 20000][Math.max(0, Math.min(5, stage))];
+      const t = Math.max(at || 0, this.ctx.currentTime);
+      for (const node of [this.musicTone, this.wetTone]) {
+        node.frequency.cancelScheduledValues(t);
+        node.frequency.setTargetAtTime(f, t, 0.8);
+      }
+      const st = Math.max(0, Math.min(5, stage));
+      const g = [0.72, 0.8, 0.9, 1.0, 1.12, 1.25][st] * (this.boost >= 2 ? 1.08 : 1);
+      this.stageGain.gain.cancelScheduledValues(t);
+      this.stageGain.gain.setTargetAtTime(g, t, 0.8);
     },
 
     tick() {
@@ -492,9 +524,14 @@
       } else if (s16 === 0) {
         this.pad(t, chordMidis(song, deg, 0), p.stepDur * 16, song.pad, out, 1);
       }
-      // Arp
+      const climax = stage >= 5;
+      const hot = climax || this.boost >= 2;
+      // Arp（高潮 / Combo 時加一層高八度）
       const ai = song.arpSeq[s16];
-      if (ai >= 0) this.pluck(t, extTone(song, deg, ai, song.arpOct), song.arp, out, stage === 0 ? 0.8 : 1);
+      if (ai >= 0) {
+        this.pluck(t, extTone(song, deg, ai, song.arpOct), song.arp, out, stage === 0 ? 0.8 : 1);
+        if (hot) this.pluck(t + p.stepDur * 0.5, extTone(song, deg, ai + 2, song.arpOct + 1), song.arp, out, 0.4);
+      }
       // Bass
       if (stage >= 1) {
         const ch = song.bassSeq[s16];
@@ -520,12 +557,25 @@
           }
         }
       }
+      // 高潮層：16 分音符鼓點、每 4 小節一記鈸、大鼓推進
+      if (hot && stage >= 2) {
+        const hatOn = song.drums.hat && song.drums.hat[s16] !== '.';
+        if (!hatOn) this.drum('hat', t, s16 % 4 === 2 ? 0.8 : 0.45, p.outDrum);
+      }
+      if (climax) {
+        if (s16 === 0 && bar % 4 === 0) this.drum('crash', t, 0.6, p.outDrum);
+        if (s16 % 4 === 0 && !song.drums.kick) this.drum('kick', t, 0.55, p.outDrum);
+        if (s16 === 12 && bar % 2 === 1) this.drum('snare', t + p.stepDur * 2, 0.5, p.outDrum);
+      }
       // Lead
       if (stage >= 4) {
         const motif = song.leadSeq[Math.floor(step / 32) % song.leadSeq.length];
         const s32 = step % 32;
         for (const [st, d, len] of motif) {
-          if (st === s32) this.leadNote(t, degToMidi(song, d, song.leadOct), p.stepDur * len * 0.92, song.lead, out);
+          if (st === s32) {
+            this.leadNote(t, degToMidi(song, d, song.leadOct), p.stepDur * len * 0.92, song.lead, out);
+            if (climax) this.leadNote(t, degToMidi(song, d, song.leadOct + 1), p.stepDur * len * 0.92, song.lead, out, 0.45);
+          }
         }
       }
     },

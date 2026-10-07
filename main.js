@@ -12,7 +12,7 @@
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -230,8 +230,16 @@
     canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
     portrait = vh > vw * 1.05;
     const buttons = settings.controls === 'buttons';
+    // 螢幕按鍵尺寸（左手區：硬降 / 間隔 / ◀▶ / ▼）
+    const rs = Math.round(Math.min(56, Math.max(44, vh * 0.062)));
+    const rb = Math.round(Math.min(100, Math.max(76, vh * 0.108)));
+    const hdGap = Math.max(0, (settings.hdGap | 0) - 16); // 扣掉格線間距，讓設定值 = 實際距離
+    touchEl.style.setProperty('--rs', rs + 'px');
+    touchEl.style.setProperty('--rb', rb + 'px');
+    touchEl.style.setProperty('--hdgap', hdGap + 'px');
+    const padH = rs * 2 + rb + hdGap + 8 * 3 + 14;
     if (portrait) {
-      const reserve = buttons ? Math.min(Math.max(vh * 0.31, 175), 275) : 12;
+      const reserve = buttons ? padH + 12 : 12;
       const top = 10;
       cell = Math.floor(Math.min((vw - 14) / 17.2, (vh - reserve - top - 6) / 20));
       const avail = vh - reserve - top;
@@ -298,7 +306,14 @@
 
   // ================= 遊戲事件 =================
   let lastWasHardDrop = false;
-  const musicStage = () => (game ? Math.min(4, Math.floor((game.lines % 10) / 2)) : 0);
+  // 音樂強度：關內每消 2 行升一階；越後面的關卡起點越高，不會退回安靜
+  const musicStage = () => {
+    if (!game) return 0;
+    const base = Math.min(2, Math.floor((game.level - 1) / 2));
+    return Math.min(5, base + Math.floor((game.lines % 10) / 2));
+  };
+  // 每輪完 6 個場景，下一輪曲速加快
+  const musicRate = () => (game ? 1 + 0.05 * Math.min(3, Math.floor((game.level - 1) / THEMES.length)) : 1);
   function onGameEvent(type, d) {
     switch (type) {
       case 'move': Snd.play('move'); break;
@@ -326,6 +341,7 @@
       }
       case 'lock': {
         if (!lastWasHardDrop) { Snd.play('lock'); fx.impactV += 18; }
+        if (d.lines === 0) Snd.setBoost(0);
         lastWasHardDrop = false;
         fx.lockFlash.push({ cells: d.cells, t: 0, life: 0.16 });
         if (d.tspin && d.lines === 0) { Snd.play('tspinNoLines'); popup(['T-SPIN' + (d.mini ? ' MINI' : '')], '#d9a8ff'); }
@@ -336,6 +352,7 @@
         if (n === 0) break;
         Snd.play('clear', d);
         Snd.setStage(musicStage());
+        Snd.setBoost(d.combo >= 2 ? d.combo : 0);
         const low = settings.fx === 'low';
         const cxB = bx + cell * 5;
         for (const row of d.rows) {
@@ -394,7 +411,7 @@
         const idx = (d.level - 1) % THEMES.length;
         if (idx !== themeIdx) {
           setTheme(idx);
-          Snd.playSong(idx, 0);
+          Snd.playSong(idx, musicStage(), musicRate());
         }
         Snd.play('levelUp');
         popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
@@ -406,6 +423,7 @@
       }
       case 'gameOver':
         Snd.stopMusic(2);
+        Snd.setBoost(0);
         Snd.play('gameOver');
         mode = 'over'; overDelay = 1.1; overFade = 0; overShown = false;
         input.releaseAll();
@@ -426,7 +444,8 @@
     const idx = (lv - 1) % THEMES.length;
     setTheme(idx);
     Snd.setMuffled(false);
-    Snd.playSong(idx, 0);
+    Snd.setBoost(0);
+    Snd.playSong(idx, musicStage(), musicRate());
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
     showOverlay(null);
     touchEl.classList.toggle('hidden', settings.controls === 'off');
@@ -798,6 +817,7 @@
     mkSlider('起始等級', 'startLevel', 1, 15, 1, (v) => `${v}（${THEMES[(v - 1) % THEMES.length].name}）`);
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
+    mkSlider('硬降鍵與 ◀ 的距離', 'hdGap', 16, 96, 2, (v) => `${v} px`);
     mkSeg('顯示 180° 按鈕', 'show180', [[false, '隱藏'], [true, '顯示']]);
     mkSeg('震動回饋', 'haptics', [[true, '開'], [false, '關']]);
     mkSeg('落點提示', 'ghost', [[true, '開'], [false, '關']]);
