@@ -253,6 +253,25 @@
     }
     return best;
   }
+  // 副歌和弦進行：大調系用 IV-V-vi-I、小調系用 VI-VII-i-v、五聲音階用 5-6-1-1 一類的進行
+  function chorusProg(song) {
+    if (song.chorus) return song.chorus;
+    const n = SCALES[song.scale].length;
+    if (n === 5) return [3, 4, 0, 0];
+    return ['major', 'lydian'].includes(song.scale) ? [3, 4, 5, 0] : [5, 6, 0, 4];
+  }
+  // 副歌旋律：以和弦音為骨架，單數小節往上爬、雙數小節往下收在長音上
+  function chorusBar(song, deg, cbar, S, Bt) {
+    const five = SCALES[song.scale].length === 5;
+    const up = five ? [2, 3, 5, 7] : [2, 4, 7, 9];
+    const down = five ? [7, 5, 4, 3] : [9, 7, 6, 4];
+    const rise = cbar % 2 === 0;
+    const rh = S === 16 ? (rise ? [[0, 6], [6, 2], [8, 4], [12, 4]] : [[0, 4], [4, 4], [8, 8]])
+      : Bt === 3 ? (rise ? [[0, 6], [6, 3], [9, 3]] : [[0, 3], [3, 3], [6, 6]])
+      : (rise ? [[0, 4], [4, 4], [8, 4]] : [[0, 6], [6, 2], [8, 4]]);
+    const tones = rise ? up : down;
+    return rh.map(([st, len], i) => [st, deg + tones[Math.min(i, tones.length - 1)] + (cbar % 4 === 3 && !rise ? -2 : 0), len]);
+  }
   function chordMidis(song, rootDeg, oct, size) {
     const n = size || (song.sevenths ? 4 : 3);
     const out = [];
@@ -290,7 +309,7 @@
       this.masterFilter.Q.value = 0.6;
       // 母帶：溫和的膠水壓縮 → 低頻飽滿 / 高頻空氣感 → 防爆音限幅
       const comp = c.createDynamicsCompressor();
-      comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 2.5; comp.attack.value = 0.012; comp.release.value = 0.25;
+      comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 1.8; comp.attack.value = 0.012; comp.release.value = 0.25;
       // 手機喇叭放不出 45Hz 以下，這段只會吃掉音量空間、讓喇叭和壓縮器破音 → 直接濾掉
       const lowShelf = c.createBiquadFilter(); lowShelf.type = 'highpass'; lowShelf.frequency.value = 42; lowShelf.Q.value = 0.7;
       const hp2 = c.createBiquadFilter(); hp2.type = 'highpass'; hp2.frequency.value = 42; hp2.Q.value = 0.7;
@@ -854,14 +873,14 @@
 
     applyTone(stage, at) {
       if (!this.ctx) return;
-      const f = this.boost >= 2 || this.build ? 20000 : [2200, 3400, 5500, 9000, 15000, 20000][Math.max(0, Math.min(5, stage))];
+      const f = this.boost >= 2 || this.build ? 20000 : [1500, 2600, 4200, 8000, 14000, 20000][Math.max(0, Math.min(5, stage))];
       const t = Math.max(at || 0, this.ctx.currentTime);
       for (const node of [this.musicTone, this.wetTone]) {
         node.frequency.cancelScheduledValues(t);
         node.frequency.setTargetAtTime(f, t, 0.8);
       }
       const st = Math.max(0, Math.min(5, stage));
-      const g = [0.66, 0.76, 0.88, 1.0, 1.14, 1.3][st] * (this.boost >= 2 || this.build ? 1.08 : 1);
+      const g = [0.5, 0.62, 0.76, 0.98, 1.16, 1.36][st] * (this.boost >= 2 || this.build ? 1.08 : 1);
       this.stageGain.gain.cancelScheduledValues(t);
       this.stageGain.gain.setTargetAtTime(g, t, 0.8);
     },
@@ -891,21 +910,39 @@
     },
 
     scheduleStep(p, step, t) {
-      const song = p.song, S = song.steps || 16, Bt = song.beat || 4;
+      const S = p.song.steps || 16, Bt = p.song.beat || 4;
       const s16 = step % S;
       const bar = Math.floor(step / S);
-      const deg = song.prog[bar % song.prog.length];
+      let entered = 0;
       if (s16 === 0) {
+        const prev = p.stage;
         p.stage = p.stageTarget;
+        if (p.stage > prev) entered = p.stage;
+        if (p.stage < 3) p.chorusBar = null; else if (p.chorusBar == null) p.chorusBar = bar;
+      }
+      const stage = p.stage;
+      // 最終副歌升全音（Key change）
+      const song = stage >= 5 ? (p.songUp || (p.songUp = Object.assign({}, p.song, { root: p.song.root + 2 }))) : p.song;
+      const chorus = stage >= 3;
+      const prog = chorus ? chorusProg(song) : song.prog;
+      const cbar = chorus && p.chorusBar != null ? bar - p.chorusBar : bar;
+      const deg = prog[cbar % prog.length];
+      if (s16 === 0) {
         p.chords.push({ t, deg });
         if (p.chords.length > 4) p.chords.shift();
       }
-      const stage = p.stage;
       const out = p.outMain;
       const climax = stage >= 5;
       const hot = climax || this.boost >= 2;
       const onBeat = s16 % Bt === 0;
       const dpan = (k) => p.drumPan[k] || p.outDrum;
+      // 進入新段落：鈸 + 大鼓重擊 + 和弦湧起，讓段落轉換聽得出來
+      if (entered >= 2) {
+        const east = song.epic === 'eastern' || song.gong;
+        this.drum(east ? 'gong' : 'crash', t, 0.9, p.outDrum);
+        this.drum(east ? 'taikoBig' : song.epic === 'orch' ? 'timpani' : 'kick', t, 1, p.outDrum);
+        if (entered >= 3) this.pad(t, chordMidis(song, deg, 1, 3), p.stepDur * S, song.epic === 'synth' ? 'supersaw' : 'choir', p.outWide, 0.7);
+      }
 
       // 和聲（聲部連接：挑最接近上一個和弦的轉位）
       if (s16 === 0) p.voicing = voiceLead(chordMidis(song, deg, 0, song.ext ? 5 : undefined), p.voicing, song.root + 5);
@@ -921,7 +958,7 @@
           const hv = 0.86 + Math.random() * 0.24 + (onBeat ? 0.08 : 0);
           const side = (s16 >> 1) % 2 ? p.outR : p.outL;
           this.pluck(t + Math.random() * 0.006, extTone(song, deg, ai, song.arpOct || 0), song.arp, side, (stage === 0 ? 0.8 : 1) * hv);
-          if (hot) this.pluck(t + p.stepDur * 0.5, extTone(song, deg, ai + 2, (song.arpOct || 0) + 1), song.arp, side === p.outL ? p.outR : p.outL, 0.4);
+          if (hot || stage >= 4) this.pluck(t + p.stepDur * 0.5, extTone(song, deg, ai + 2, (song.arpOct || 0) + 1), song.arp, side === p.outL ? p.outR : p.outL, 0.4);
         }
       }
       // 低音
@@ -970,6 +1007,16 @@
         const kind = d.snare ? 'snare' : d.gated ? 'gated' : d.tanggu ? 'tanggu' : d.janggu ? 'jangguHi' : d.frame ? 'frame' : d.doum ? 'tek' : d.buk ? 'buk' : d.taikoBig ? 'taikoBig' : d.brush ? 'brush' : null;
         if (kind && ((s16 - (S - Bt)) % 2 === 0 || stage >= 3)) this.drum(kind, t, 0.45 + (s16 - (S - Bt)) * 0.12, dpan(kind));
       }
+      // 副歌的推進層：大鼓在 1、3 拍（最終副歌每拍），低音疊高八度
+      if (chorus && song.drums && Object.keys(song.drums).length && !song.drums.bowl) {
+        const big = song.drive ? 'kick' : song.epic === 'eastern' || song.gong ? 'taikoBig' : song.epic === 'orch' ? 'timpani' : 'tom';
+        const every = stage >= 5 ? Bt : Bt * 2;
+        if (s16 % every === 0 && !(song.drums[big] && song.drums[big][s16] === 'x')) this.drum(big, t, s16 === 0 ? 0.8 : 0.55, p.outDrum);
+      }
+      if (chorus && song.bass && song.bassSeq && song.bassSeq !== 'walk') {
+        const ch = song.bassSeq[s16];
+        if (ch && ch !== '.' && ch !== '-') this.bassNote(t, degToMidi(song, deg, song.bassOct + 1), p.stepDur * 0.9, song.bass, out);
+      }
       if (song.lofi && Math.random() < 0.3) this.noise({ t: t + Math.random() * p.stepDur, freq: 2500, d: 0.004, peak: 0.015 + Math.random() * 0.03, out: p.outDrum });
       if (song.rain && s16 === 0) this.noise({ t, ftype: 'bandpass', freq: 2600, q: 0.4, a: 0.6, d: p.stepDur * (S + 1), peak: 0.045, out: p.outDrum, wet: 0.2 });
       if (song.gong && stage >= 3 && s16 === 0 && bar % 4 === 0) this.drum('gong', t, 1, p.outDrum);
@@ -1005,25 +1052,33 @@
         if (!hatOn) this.drum('hat', t, s16 % 4 === 2 ? 0.8 : 0.45, dpan('hat'));
       }
       if (song.drive && climax && s16 === 0 && bar % 2 === 0) this.drum('crash', t, 0.6, p.outDrum);
-      // 主旋律：第 1 階起隔段出現，第 4 階起完整；每 4 段的後半句往上移三度變奏
-      const section = Math.floor(step / (S * 8));
+      // 主旋律
+      //   主歌（第 1~2 階）：作曲的旋律；第 1 階每隔一句才唱，第 2 階每句都唱
+      //   副歌（第 3 階起）：依和弦生成的上揚旋律，音域更高、更長的音；第 4 階起疊八度
       const phrase = Math.floor(step / (S * 2));
       const sP = step % (S * 2);
-      const leadOn = stage >= 4 || (stage >= 1 && section % 2 === 0);
-      if (leadOn && song.leadSeq) {
+      if (!chorus && stage >= 1 && song.leadSeq && (stage >= 2 || phrase % 2 === 0)) {
         const motif = song.leadSeq[phrase % song.leadSeq.length];
-        const shift = section % 4 === 3 && song.leadSeq.length > 1 && phrase % 2 === 0 ? 2 : 0;
-        const lv = stage >= 4 ? 1 : 0.42 + stage * 0.08;
+        const section = Math.floor(step / (S * 8));
+        const shift = section % 2 === 1 && song.leadSeq.length > 1 && phrase % 2 === 0 ? 2 : 0;
+        const lv = stage >= 2 ? 0.8 : 0.55;
         for (let i = 0; i < motif.length; i++) {
           const [st, d, len] = motif[i];
           if (st !== sP) continue;
           const dd = i === motif.length - 1 ? d : d + shift;
           this.leadNote(t, degToMidi(song, dd, song.leadOct), p.stepDur * len * 0.92, song.lead, out, lv * (0.92 + Math.random() * 0.12));
-          if (climax && song.epic !== 'none') this.leadNote(t, degToMidi(song, dd, song.leadOct + 1), p.stepDur * len * 0.92, song.lead, out, 0.4);
+        }
+      }
+      if (chorus) {
+        const notes = chorusBar(song, deg, cbar, S, Bt);
+        for (const [st, d, len] of notes) {
+          if (st !== s16) continue;
+          this.leadNote(t, degToMidi(song, d, song.leadOct), p.stepDur * len * 0.94, song.lead, out, 1);
+          if (stage >= 4) this.leadNote(t, degToMidi(song, d, song.leadOct + 1), p.stepDur * len * 0.94, song.lead, p.outR, stage >= 5 ? 0.55 : 0.4);
         }
       }
       // 對位旋律（第 3 階起）
-      if (song.counter && stage >= 3) {
+      if (song.counter && stage === 2) {
         const motif = song.counter.notes[phrase % song.counter.notes.length];
         for (const [st, d, len] of motif) if (st === sP) this.leadNote(t, degToMidi(song, d, song.counter.oct || 0), p.stepDur * len * 0.9, song.counter.t, p.outR, 0.55);
       }
@@ -1036,7 +1091,7 @@
       const now = this.ctx.currentTime;
       let deg = p.song.prog[0];
       for (const ch of p.chords) if (ch.t <= now) deg = ch.deg;
-      return { song: p.song, deg };
+      return { song: (p.stage >= 5 && p.songUp) || p.song, deg };
     },
 
     // 給畫面用的節拍資訊

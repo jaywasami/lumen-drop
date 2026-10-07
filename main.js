@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.07-6';
+  const VERSION = '2026.10.07-7';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -495,9 +495,12 @@
   // 音樂強度：關內每消 2 行升一階；越後面的關卡起點越高，不會退回安靜
   const musicStage = () => {
     if (!game) return 0;
-    const base = Math.min(2, Math.floor((game.level - 1) / 2));
+    // 每關都是一首完整的歌：前奏 → 主歌 → 主歌二 → 副歌 → 副歌二 → 最終副歌（升 Key）
     const lpl = game.settings.linesPerLevel;
-    return Math.min(5, base + Math.floor((game.lines % lpl) * 5 / lpl));
+    const f = (game.lines % lpl) / lpl;
+    let st = 0;
+    for (const x of [0.1, 0.3, 0.5, 0.7, 0.87]) if (f >= x) st++;
+    return Math.max(st, Math.min(1, Math.floor((game.level - 1) / 4)));
   };
   // 每輪完所有場景，下一輪曲速加快
   const musicRate = () => (game ? 1 + 0.05 * Math.min(3, Math.floor((game.level - 1) / THEMES.length)) : 1);
