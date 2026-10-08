@@ -222,7 +222,7 @@
       mel: ['4/2 4/2 6/2 4/2 2/4 1/2 2/6 4/2 6/2 7/8', '7/2 6/2 4/4 2/2 4/6 2/4 1/4 0/8'],
     },
     { // 主場應援：銅管號角主題 + 搖滾鼓 + 失真吉他，副歌全場齊喊（旋律依「龍鳴號角」譜例重新編曲）
-      name: '主場應援', bpm: 138, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 5, 6, 0], chorus: [0, 5, 6, 0], sevenths: false, drive: true, wet: 0.7, vol: 1.0,
+      name: '主場應援', bars: 50, bpm: 138, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 5, 6, 0], chorus: [0, 5, 6, 0], sevenths: false, drive: true, wet: 0.7, vol: 1.0,
       pad: 'power', padSeq: 'x.....x.x.......', arp: null, bass: 'saw', bassOct: -2, lead: 'trumpetLead', leadOct: 0, epic: 'orch', fixedMel: true, chorusVoice: 'choirLead',
       bassSeq: 'R.R.R.R.R.R.R.R.',
       drums: { kick: 'x.....x.x.......', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '....x.......x...' },
@@ -232,7 +232,7 @@
       chorusMel: ['7/12 6/2 5/2 4/16', '3/4 3/4 3/2 4/2 5/2 4/2 3/8 2/8', '7/12 6/2 5/2 4/16', '3/4 3/4 4/4 4/4 7/16'],
     },
     { // 主場應援 第二首：體育場四拍大鼓 + 側鏈合成器 + 銅管，每四小節句尾全場重音（旋律依「龍光乍現」譜例重新編曲）
-      name: '龍光乍現', bpm: 136, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 0, 5, 6], chorus: [0, 5, 6, 0], sevenths: false, pump: true, wet: 0.8, vol: 1.0,
+      name: '龍光乍現', bars: 40, bpm: 136, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 0, 5, 6], chorus: [0, 5, 6, 0], sevenths: false, pump: true, wet: 0.8, vol: 1.0,
       pad: 'stab', padSeq: '..x...x...x...x.', arp: null, bass: 'saw', bassOct: -2, lead: 'trumpetLead', leadOct: 0, epic: 'synth', fixedMel: true, chorusVoice: 'choirLead',
       bassSeq: 'R.RRR.RRR.RRR.RR',
       drums: { kick: 'x...x...x...x...', clap: '....x.......x...', hat: '..x...x...x...x.' },
@@ -871,6 +871,12 @@
       return p;
     },
 
+    // 目前曲子已經播了幾小節、整首有幾小節（給輪播用）
+    songProgress() {
+      const p = this.current();
+      if (!p || !this.ctx) return null;
+      return { name: p.song.name, bars: (this.ctx.currentTime - p.start) / (p.stepDur * (p.song.steps || 16)), len: p.song.bars || 0 };
+    },
     current() {
       for (let i = this.players.length - 1; i >= 0; i--) if (!this.players[i].stopping) return this.players[i];
       return null;

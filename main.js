@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-6';
+  const VERSION = '2026.10.08-7';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -1910,6 +1910,11 @@
     updateTheme(dt);
     const sdt = dt * (1 - 0.8 * zoneFx.on); // Zone 中背景慢動作
     if (scene) { if (scene.setIntensity) scene.setIntensity(game ? intensity : 1); scene.update(sdt); }
+    // 有多首歌的關卡：一首播完就換下一首，不必等換關
+    if (game && THEMES[themeIdx].songs && (mode === 'playing' || mode === 'paused')) {
+      const sp = Snd.songProgress && Snd.songProgress();
+      if (sp && sp.len && sp.bars >= sp.len && THEMES[themeIdx].songs.includes(sp.name)) Snd.playSong(nextSong(themeIdx), musicStage(), musicRate());
+    }
     if (prevScene) prevScene.update(sdt);
     if (tr && tr.prev) tr.prev.update(dt);
     updateFx(dt);
