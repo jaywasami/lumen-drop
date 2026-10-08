@@ -3985,7 +3985,7 @@
     return S;
   }
   class Stadium {
-    constructor(low) { this.low = low; this.night = 0.12; this.target = 0.12; this.cheer = 0; this.balloons = []; this.sparks = []; this.confetti = []; this.fwT = 0; this.stage = 1; }
+    constructor(low) { this.low = low; this.night = 0.12; this.target = 0.12; this.cheer = 0; this.balloons = []; this.sparks = []; this.confetti = []; this.streamers = []; this.hr = null; this.fwT = 0; this.stage = 1; }
     resize(w, h) {
       this.w = w; this.h = h;
       this.sc = Math.min(w / 412, h / 860);
@@ -4025,8 +4025,25 @@
       while (this.balloons.length < (this.low ? 3 : 6)) this.balloons.push(this.newBalloon(false));
       for (const p of this.sparks) { p.vy += 40 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s; }
       this.sparks = this.sparks.filter((p) => p.life > 0);
-      for (const p of this.confetti) { p.vy = Math.min(p.vy + 90 * s, 60); p.vx *= Math.pow(0.4, s); p.x += (p.vx + Math.sin(p.ph) * 18) * s; p.y += p.vy * s; p.ph += s * 6; p.r += p.vr * s; }
+      for (const p of this.confetti) { p.vy = Math.min(p.vy + 520 * s, 55); p.vx *= Math.pow(0.35, s); p.x += (p.vx + Math.sin(p.ph) * 18) * s; p.y += p.vy * s; p.ph += s * 6; p.r += p.vr * s; }
       this.confetti = this.confetti.filter((p) => p.y < this.H + 10);
+      for (const st of this.streamers) {
+        st.vy += 260 * s; st.vx *= Math.pow(0.5, s); st.vy = Math.min(st.vy, 70); st.ph += s * 7;
+        st.x += (st.vx + Math.sin(st.ph) * 30 * (st.vy > 0 ? 1 : 0)) * s; st.y += st.vy * s;
+        st.trail.unshift([st.x, st.y]); if (st.trail.length > 18) st.trail.pop();
+      }
+      this.streamers = this.streamers.filter((st) => st.trail[st.trail.length - 1][1] < this.H + 20);
+      const hr = this.hr;
+      if (hr) {
+        hr.t += s;
+        if (!hr.boom && hr.t > 0.05) { hr.vy += 240 * s; hr.x += hr.vx * s; hr.y += hr.vy * s; hr.trail.unshift([hr.x, hr.y]); if (hr.trail.length > 26) hr.trail.pop(); }
+        if (!hr.boom && (hr.y < this.H * 0.1 || hr.t > 1.1)) {
+          hr.boom = true;
+          for (let i = 0; i < 3; i++) this.firework(hr.x + rand(-60, 60), hr.y + rand(-20, 50), true);
+          this.cannon(1.6);
+        }
+        if (hr.t > 2.8) this.hr = null;
+      }
       // 最終副歌的夜晚：自動放煙火
       if (this.night > 0.7 && this.stage >= 5) { this.fwT -= s; if (this.fwT <= 0) { this.fwT = rand(1.4, 2.6); this.firework(rand(0.1, 0.9) * this.W, rand(0.08, 0.35) * this.H, false); } }
     }
@@ -4070,28 +4087,79 @@
         mg.globalCompositeOperation = 'source-over';
       }
       g.drawImage(this.mcv, mb.x, mb.y, mb.w, mb.h);
-      // 紙花與煙火
-      for (const p of this.confetti) { g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.fillRect(-2.5, -1.5, 5, 3); g.restore(); }
-      if (this.sparks.length) {
-        g.globalCompositeOperation = 'lighter';
-        for (const p of this.sparks) { const a = Math.min(1, p.life) * 0.9; g.fillStyle = `rgba(${p.col},${a})`; g.beginPath(); g.arc(p.x, p.y, 1.8, 0, TAU); g.fill(); glow(g, p.x, p.y, 6, p.col, a * 0.35); }
-        g.globalCompositeOperation = 'source-over';
-      }
       g.restore();
     }
-    burst(d) {
-      this.cheer = Math.min(1.2, this.cheer + 0.3 * d.lines);
-      const W = this.W, H = this.H;
-      // 紙花從兩側噴出
-      const n = Math.min(this.low ? 20 : 50, d.lines * 10 + (d.lines >= 4 ? 20 : 0));
+    // 紙花大砲：從畫面左右下角往上噴
+    cannon(k) {
+      const W = this.W, H = this.H, n = Math.round(Math.min(this.low ? 40 : 90, 30 * k));
       for (let i = 0; i < n; i++) {
         const left = i % 2 === 0;
-        this.confetti.push({ x: left ? 0 : W, y: H * rand(0.55, 0.66), vx: (left ? 1 : -1) * rand(60, 160), vy: rand(-180, -90), ph: rand(0, TAU), r: rand(0, TAU), vr: rand(-6, 6), c: Math.random() < 0.6 ? '#e8303a' : '#ffffff' });
+        this.confetti.push({ x: left ? -5 : W + 5, y: H * rand(0.62, 0.78), vx: (left ? 1 : -1) * rand(90, 230) * (0.7 + k * 0.3), vy: rand(-420, -220) * (0.75 + k * 0.25), ph: rand(0, TAU), r: rand(0, TAU), vr: rand(-9, 9), c: ['#e8303a', '#ffffff', '#ff7a7a', '#ffd6d6'][(Math.random() * 4) | 0], w: rand(6, 10), h: rand(3.5, 5.5) });
       }
-      // 晚上加煙火
-      if (this.night > 0.45) { const m = Math.min(3, d.lines - 1 + (d.lines >= 4 ? 1 : 0)); for (let i = 0; i < m; i++) this.firework(rand(0.1, 0.9) * W, rand(0.06, 0.32) * H, d.lines >= 4); }
-      // 多放幾顆氣球
-      for (let i = 0; i < Math.min(3, d.lines - 1); i++) this.balloons.push(this.newBalloon(false, rand(0.05, 0.95) * W));
+    }
+    // 彩帶：長條緞帶從看台兩側往上射，再飄下來
+    streamer(k) {
+      const W = this.W, H = this.H, n = Math.min(this.low ? 4 : 10, Math.round(4 * k));
+      for (let i = 0; i < n; i++) {
+        const left = i % 2 === 0;
+        this.streamers.push({ x: left ? rand(0, W * 0.15) : rand(W * 0.85, W), y: H * rand(0.66, 0.74), vx: (left ? 1 : -1) * rand(40, 140), vy: rand(-560, -400), ph: rand(0, TAU), c: ['#e8303a', '#ffffff', '#3d6bff', '#ff8a8a'][i % 4], trail: [] });
+      }
+    }
+    burst(d) {
+      const n = d.lines || 0;
+      if (!n) return;
+      this.cheer = Math.min(1.2, this.cheer + 0.3 * n);
+      const W = this.W, H = this.H, big = n >= 4 || d.tspin || d.pc;
+      // 每次消行都有紙花；兩行以上加彩帶；三行以上或 T-Spin 放煙火；四行 = 全壘打
+      this.cannon(n * 0.6 + (big ? 0.8 : 0));
+      if (n >= 2 || d.tspin) this.streamer(n);
+      if (n >= 3 || d.tspin || this.night > 0.45) { const m = Math.min(4, n - 1 + (d.tspin ? 1 : 0) + (this.night > 0.45 ? 1 : 0)); for (let i = 0; i < m; i++) this.firework(rand(0.1, 0.9) * W, rand(0.06, 0.3) * H, n >= 4); }
+      if (n >= 4) this.homerun();
+      for (let i = 0; i < Math.min(3, n - 1); i++) this.balloons.push(this.newBalloon(false, rand(0.05, 0.95) * W));
+    }
+    homerun() {
+      const W = this.W, H = this.H;
+      this.hr = { x: W * 0.45, y: H * 0.9, vx: rand(120, 180) * (Math.random() < 0.5 ? -1 : 1), vy: -820, t: 0, trail: [], boom: false };
+      this.cheer = 1.5;
+    }
+    // 畫在棋盤前面：紙花、彩帶、煙火、全壘打
+    drawFront(g, t) {
+      if (!this.confetti.length && !this.streamers.length && !this.sparks.length && !this.hr) return;
+      g.save(); g.scale(this.sc, this.sc);
+      for (const st of this.streamers) {
+        const tr = st.trail; if (tr.length < 2) continue;
+        g.strokeStyle = st.c; g.lineCap = 'round'; g.lineJoin = 'round';
+        for (let i = 1; i < tr.length; i++) { g.lineWidth = 5 * (1 - i / tr.length) + 1; g.globalAlpha = 0.95 - i / tr.length * 0.5; g.beginPath(); g.moveTo(tr[i - 1][0], tr[i - 1][1]); g.lineTo(tr[i][0], tr[i][1]); g.stroke(); }
+      }
+      g.globalAlpha = 1;
+      for (const p of this.confetti) { g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.scale(1, Math.cos(p.ph)); g.fillStyle = p.c; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); g.restore(); }
+      if (this.sparks.length) {
+        g.globalCompositeOperation = 'lighter';
+        for (const p of this.sparks) { const a = Math.min(1, p.life) * 0.95; g.fillStyle = `rgba(${p.col},${a})`; g.beginPath(); g.arc(p.x, p.y, 2.4, 0, TAU); g.fill(); glow(g, p.x, p.y, 9, p.col, a * 0.4); }
+        g.globalCompositeOperation = 'source-over';
+      }
+      const hr = this.hr;
+      if (hr) {
+        // 球的拖尾 + 球
+        if (!hr.boom) {
+          g.globalCompositeOperation = 'lighter';
+          for (let i = 0; i < hr.trail.length; i++) { const [x, y] = hr.trail[i]; glow(g, x, y, 16 * (1 - i / hr.trail.length) + 4, '255,240,200', 0.5 * (1 - i / hr.trail.length)); }
+          g.globalCompositeOperation = 'source-over';
+          g.fillStyle = '#fff'; g.beginPath(); g.arc(hr.x, hr.y, 7, 0, TAU); g.fill();
+          g.strokeStyle = '#e8303a'; g.lineWidth = 1.4;
+          g.beginPath(); g.arc(hr.x - 7, hr.y, 6, -0.9, 0.9); g.stroke(); g.beginPath(); g.arc(hr.x + 7, hr.y, 6, Math.PI - 0.9, Math.PI + 0.9); g.stroke();
+        }
+        // 「全壘打！」大字
+        const k = Math.min(1, hr.t / 0.25), fade = hr.t > 2.2 ? Math.max(0, 1 - (hr.t - 2.2) / 0.6) : 1;
+        const sz = 46 * (0.6 + 0.4 * k) * (1 + Math.sin(hr.t * 10) * 0.03);
+        g.save(); g.translate(this.W / 2, this.H * 0.2); g.rotate(-0.06); g.globalAlpha = fade;
+        g.font = `900 ${sz}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.lineJoin = 'round'; g.lineWidth = 9; g.strokeStyle = '#7a0a14'; g.strokeText('全壘打！', 0, 0);
+        const tg = g.createLinearGradient(0, -sz / 2, 0, sz / 2); tg.addColorStop(0, '#ffffff'); tg.addColorStop(0.5, '#ffe0e0'); tg.addColorStop(1, '#ff4a4a');
+        g.fillStyle = tg; g.fillText('全壘打！', 0, 0);
+        g.restore();
+      }
+      g.restore();
     }
   }
 
