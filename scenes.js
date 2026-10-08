@@ -4023,7 +4023,7 @@
       for (const b of this.balloons) { b.y -= b.vy * b.z * s; b.ph += s * 1.3; }
       this.balloons = this.balloons.filter((b) => b.y > -60);
       while (this.balloons.length < (this.low ? 3 : 6)) this.balloons.push(this.newBalloon(false));
-      for (const p of this.sparks) { p.vy += 40 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s; }
+      for (const p of this.sparks) { p.px = p.x; p.py = p.y; p.vy += 40 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s; }
       this.sparks = this.sparks.filter((p) => p.life > 0);
       for (const p of this.confetti) { p.vy = Math.min(p.vy + 520 * s, 55); p.vx *= Math.pow(0.35, s); p.x += (p.vx + Math.sin(p.ph) * 18) * s; p.y += p.vy * s; p.ph += s * 6; p.r += p.vr * s; }
       this.confetti = this.confetti.filter((p) => p.y < this.H + 10);
@@ -4049,7 +4049,9 @@
     }
     firework(x, y, big) {
       const n = (big ? 60 : 36) * (this.low ? 0.5 : 1), col = Math.random() < 0.6 ? '255,90,80' : Math.random() < 0.5 ? '255,255,255' : '255,200,120';
-      for (let i = 0; i < n; i++) { const a = (i / n) * TAU, v = rand(50, big ? 130 : 95); this.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.9, 1.5), col }); }
+      // 白天用的實心顏色（每朵煙火一個主色，夾一點白色）
+      const solid = ['#e8303a', '#2f6bff', '#ff4fa3', '#ff8a1e', '#19b36b', '#8a3dff'][(Math.random() * 6) | 0];
+      for (let i = 0; i < n; i++) { const a = (i / n) * TAU, v = rand(50, big ? 130 : 95); this.sparks.push({ x, y, px: x, py: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.9, 1.5), col, sc: Math.random() < 0.8 ? solid : '#ffffff' }); }
     }
     draw(g, t, beat, B) {
       const w = this.w, h = this.h, sc = this.sc, N = this.night;
@@ -4134,9 +4136,24 @@
       g.globalAlpha = 1;
       for (const p of this.confetti) { g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.scale(1, Math.cos(p.ph)); g.fillStyle = p.c; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); g.restore(); }
       if (this.sparks.length) {
-        g.globalCompositeOperation = 'lighter';
-        for (const p of this.sparks) { const a = Math.min(1, p.life) * 0.95; g.fillStyle = `rgba(${p.col},${a})`; g.beginPath(); g.arc(p.x, p.y, 2.4, 0, TAU); g.fill(); glow(g, p.x, p.y, 9, p.col, a * 0.4); }
-        g.globalCompositeOperation = 'source-over';
+        // 白天：實心彩色火花（帶短尾巴，亮天空也看得清楚）；晚上：發光火花；黃昏兩種交疊
+        const N = this.night, day = 1 - Math.max(0, Math.min(1, (N - 0.35) / 0.4));
+        if (day > 0.02) {
+          g.lineCap = 'round';
+          for (const p of this.sparks) {
+            const a = Math.min(1, p.life * 1.4) * day;
+            g.globalAlpha = a; g.strokeStyle = p.sc; g.lineWidth = 3.2;
+            const tx = p.x - (p.x - p.px) * 3, ty = p.y - (p.y - p.py) * 3;
+            g.beginPath(); g.moveTo(tx, ty); g.lineTo(p.x, p.y); g.stroke();
+            g.fillStyle = p.sc; g.beginPath(); g.arc(p.x, p.y, 2.6, 0, TAU); g.fill();
+          }
+          g.globalAlpha = 1;
+        }
+        if (day < 0.98) {
+          g.globalCompositeOperation = 'lighter';
+          for (const p of this.sparks) { const a = Math.min(1, p.life) * 0.95 * (1 - day); g.fillStyle = `rgba(${p.col},${a})`; g.beginPath(); g.arc(p.x, p.y, 2.4, 0, TAU); g.fill(); glow(g, p.x, p.y, 9, p.col, a * 0.4); }
+          g.globalCompositeOperation = 'source-over';
+        }
       }
       const hr = this.hr;
       if (hr) {
