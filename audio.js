@@ -244,6 +244,7 @@
       bassSeq: 'R.RRR.RRR.RRR.RR',
       drums: { kick: 'x...x...x...x...', clap: '....x.......x...', hat: '..x...x...x...x.' },
       accent: { every: 4, at: 1, steps: [12] }, // 譜上 A 段第 2、6 小節第 4 拍的重音（高音 G）
+      chant: true, // 副歌後接 8 小節呼喊應援段
       // 級數以 A4 為 0：G4→-1、E4→-3、D4→-4、C4→-5、A3→-7、G5→6；長度以 16 分音符為單位
       // 前奏（第 1–8 小節）：E. C D E~E C E 的號角動機
       mel: ['-3/3 -5/1 -4/2 -3/4 -5/2 -3/4 -3/3 -5/1 -4/2 -3/4 -5/2 -3/4', '-3/3 -5/1 -4/2 -3/4 -5/2 -3/4 -3/3 -5/1 -4/2 -3/4 -5/2 -3/2 -4/2',
@@ -1167,7 +1168,18 @@
           this.leadNote(t, degToMidi(song, dd, song.leadOct) + (acc || 0), p.stepDur * len * 0.92, song.lead, out, lv * (0.92 + Math.random() * 0.12));
         }
       }
-      if (chorus) {
+      // 呼喊應援段（有 chant 的歌）：副歌每 8 小節後接 8 小節只有鼓、拍手與齊喊重音，旋律休息
+      const chantNow = song.chant && chorus && Math.floor(cbar / 8) % 2 === 1;
+      if (chantNow) {
+        if (onBeat) this.drum('clap', t, s16 % (Bt * 2) === Bt ? 1 : 0.7, p.outDrum);
+        if (s16 === 12 || s16 === 14) {
+          this.drum('kickHard', t, 1.1, p.outDrum); this.drum('tom', t, 0.8, p.outDrum);
+          this.brass(t, chordMidis(song, deg, 1, 3), p.stepDur * 1.6, stage >= 5 ? 1 : 0.85, out);
+          this.leadNote(t, degToMidi(song, deg + 7, song.leadOct - 1), p.stepDur * 1.4, 'choirLead', p.outL, 1);
+        }
+        if (s16 === 0 && cbar % 4 === 0) this.drum('crash', t, 0.8, p.outDrum);
+      }
+      if (chorus && !chantNow) {
         let notes;
         if (song.chorusSeq) {
           // 作好的副歌旋律：兩小節一句，跟著副歌小節數走

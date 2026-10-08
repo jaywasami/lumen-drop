@@ -3093,7 +3093,8 @@
     headPos(t) {
       const w = this.w, h = this.h;
       const a = t * 0.32;
-      return [w * 0.5 + Math.cos(a) * w * 0.44 + Math.sin(a * 3.1) * w * 0.04, h * 0.72 + Math.sin(a) * h * 0.22 + Math.sin(a * 2.3 + 1) * h * 0.03];
+      // 繞著棋盤飛：經過左右兩側、上方與棋盤下方的空檔，龍頭比較常露臉
+      return [w * 0.5 + Math.cos(a) * w * 0.46 + Math.sin(a * 2.2) * w * 0.03, h * 0.42 + Math.sin(a) * h * 0.35 + Math.sin(a * 2 + 1) * h * 0.03];
     }
     update(dt) {
       const s = dt / 1000;
@@ -4114,7 +4115,7 @@
   }
   class Stadium {
     // 白天的球場很亮，光暈要壓低，不然整片過曝；入夜後才慢慢加強
-    get bloomScale() { return 0.12 + 0.68 * Math.max(0, Math.min(1, (this.night - 0.3) / 0.6)); }
+    get bloomScale() { return 0.12 + 0.88 * Math.max(0, Math.min(1, (this.night - 0.3) / 0.6)); }
     constructor(low) { this.low = low; this.night = 0.12; this.target = 0.12; this.cheer = 0; this.balloons = []; this.sparks = []; this.confetti = []; this.streamers = []; this.hr = null; this.fwT = 0; this.stage = 1; }
     resize(w, h) {
       this.w = w; this.h = h;
