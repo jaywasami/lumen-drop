@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-7';
+  const VERSION = '2026.10.08-8';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -139,14 +139,18 @@
     { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！', songs: ['主場應援', '龍光乍現'] },
   ];
   let themeIdx = 0;
-  // 有多首歌的關卡：每次來到這關就換下一首（輪播）
+  // 有多首歌的關卡：每次進這關就從上次的下一首開始（記在本機，重開遊戲也接著輪），播完一首換下一首
   const songTurn = {};
-  function nextSong(i) {
+  function nextSong(i, cont) {
     const th = THEMES[i];
     if (!th.songs) return th.name;
-    const k = songTurn[i] || 0;
-    songTurn[i] = k + 1;
-    return th.songs[k % th.songs.length];
+    if (!cont) {
+      let first = 0;
+      try { first = +(localStorage.getItem('lumen-song-turn-' + th.name) || 0) || 0; } catch (_) { /* ignore */ }
+      try { localStorage.setItem('lumen-song-turn-' + th.name, String(first + 1)); } catch (_) { /* ignore */ }
+      songTurn[i] = first;
+    } else songTurn[i] = (songTurn[i] || 0) + 1;
+    return th.songs[songTurn[i] % th.songs.length];
   }
   const accent = THEMES[0].accent.slice();
   const scenes = [];
@@ -1913,7 +1917,7 @@
     // 有多首歌的關卡：一首播完就換下一首，不必等換關
     if (game && THEMES[themeIdx].songs && (mode === 'playing' || mode === 'paused')) {
       const sp = Snd.songProgress && Snd.songProgress();
-      if (sp && sp.len && sp.bars >= sp.len && THEMES[themeIdx].songs.includes(sp.name)) Snd.playSong(nextSong(themeIdx), musicStage(), musicRate());
+      if (sp && sp.len && sp.bars >= sp.len && THEMES[themeIdx].songs.includes(sp.name)) Snd.playSong(nextSong(themeIdx, true), musicStage(), musicRate());
     }
     if (prevScene) prevScene.update(sdt);
     if (tr && tr.prev) tr.prev.update(dt);
