@@ -8,14 +8,14 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-13';
+  const VERSION = '2026.10.08-14';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: coarse ? 'balanced' : 'high', showFps: false, startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true, name: '', vsRounds: 3,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: coarse ? 'balanced' : 'high', showFps: false, startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true, name: '', vsRounds: 3, stage: -1,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -1302,6 +1302,8 @@
     lastFirstTheme = soloOrder[0];
   }
   function themeFor(level) {
+    // 單人模式可在設定裡指定關卡：整局都在那個場景
+    if (!vs && settings.stage >= 0 && settings.stage < THEMES.length) return settings.stage | 0;
     const i = (level - 1) % THEMES.length;
     const order = vs ? vs.themeOrder : soloOrder;
     return order ? order[i] : i;
@@ -2020,6 +2022,16 @@
     }
     mkSlider('按鍵整體大小', 'btnScale', 0.7, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`);
     mkSlider('起始等級（速度）', 'startLevel', 1, THEMES.length, 1, (v) => `${v}`);
+    {
+      const row = document.createElement('div'); row.className = 'set-row';
+      const lab = document.createElement('label'); lab.append('指定關卡（下一局生效）');
+      const sel = document.createElement('select'); sel.className = 'stage-sel';
+      [[-1, '隨機（每關換場景）']].concat(THEMES.map((th, i) => [i, th.name])).forEach(([v, name]) => {
+        const o = document.createElement('option'); o.value = String(v); o.textContent = name; if ((settings.stage | 0) === v || (v === -1 && !(settings.stage >= 0))) o.selected = true; sel.append(o);
+      });
+      sel.addEventListener('change', () => { settings.stage = +sel.value; applySettings(); });
+      row.append(lab, sel); body.append(row);
+    }
     mkSeg('觸控操作', 'controls', [['buttons', '螢幕按鍵'], ['gesture', '手勢'], ['off', '關閉']]);
     mkSeg('硬降按鈕', 'hdMode', [['release', '放開才落（防誤觸）'], ['press', '按下即落']]);
     mkSlider('硬降鍵與 ◀ 的距離', 'hdGap', 16, 96, 2, (v) => `${v} px`);

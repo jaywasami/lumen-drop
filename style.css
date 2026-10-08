@@ -180,3 +180,6 @@ body.post-on #c { opacity: 0; }
 body.post-light #gl { display: block; mix-blend-mode: screen; }
 .zone-btn { background: transparent; border-color: transparent; color: transparent; }
 .zone-btn.ready { border-color: rgba(255, 255, 255, 0.25); }
+
+/* 設定：指定關卡下拉選單 */
+.stage-sel { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25); background: rgba(20,24,48,0.9); color: #fff; max-width: 60%; }
