@@ -619,7 +619,7 @@
       }
 
       // 鎖定延遲
-      if (this.grounded() && !(this.zone && !soft)) {
+      if (this.grounded()) {
         this.lockTimer += dt;
         if (this.lockTimer >= s.lockDelay) this.lockPiece();
       } else {

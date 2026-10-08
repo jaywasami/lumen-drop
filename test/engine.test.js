@@ -435,6 +435,18 @@ test('Zone：時間停止、消的行沉到底部，時間到一次清除並加�
   assert.ok(ev.some((e) => e[0] === 'zoneEnd' && e[1].lines === 2));
 });
 
+test('Zone：方塊不會自己落下，但碰到底後照常自動鎖定', () => {
+  const g = new Game({ seed: 7, settings: { zone: true } });
+  g.zoneMeter = 1;
+  g.press('zone');
+  setBottom(g, []);
+  put(g, 'O', 0, 4, 30); g.cur.y = g.ghostY(); // 已經碰到地板
+  const pieces = g.pieces;
+  g.update(600); // 超過 0.5 秒鎖定延遲
+  assert.equal(g.pieces, pieces + 1);
+  assert.ok(g.zone); // Zone 仍在進行
+});
+
 test('Zone：對戰預設關閉', () => {
   const g = new Game({ seed: 7 });
   g.zoneMeter = 1;
