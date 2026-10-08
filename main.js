@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-4';
+  const VERSION = '2026.10.08-5';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -136,6 +136,7 @@
     { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
     { name: '飛龍', accent: [255, 200, 80], style: 'gold', sub: '龍騰九霄' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
+    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！' },
   ];
   let themeIdx = 0;
   const accent = THEMES[0].accent.slice();
@@ -2148,6 +2149,6 @@
   // 供自動測試使用
   window.__lumen = {
     get game() { return game; }, get mode() { return mode; }, get fpsStat() { return fpsStat; }, applySettings, startGame, settings: () => settings, get vs() { return vs; }, startCpu,
-    setTheme: (i) => { setTheme(i, true); }, themes: THEMES, get themeIdx() { return themeIdx; }, get post() { return post; },
+    setTheme: (i) => { setTheme(i, true); }, get scene() { return scene; }, themes: THEMES, get themeIdx() { return themeIdx; }, get post() { return post; },
   };
 })();

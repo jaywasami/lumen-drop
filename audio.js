@@ -221,11 +221,23 @@
       drums: { kick: 'x...x...x...x...', clap: '....x.......x...', shaker: 'x.x.x.x.x.x.x.x.' },
       mel: ['4/2 4/2 6/2 4/2 2/4 1/2 2/6 4/2 6/2 7/8', '7/2 6/2 4/4 2/2 4/6 2/4 1/4 0/8'],
     },
+    { // 主場應援：銅管號角主題 + 搖滾鼓 + 失真吉他，副歌全場齊喊（旋律依「龍鳴號角」譜例重新編曲）
+      name: '主場應援', bpm: 138, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 5, 6, 0], chorus: [0, 5, 6, 0], sevenths: false, drive: true, wet: 0.7, vol: 1.0,
+      pad: 'power', padSeq: 'x.....x.x.......', arp: null, bass: 'saw', bassOct: -2, lead: 'trumpetLead', leadOct: 0, epic: 'orch', fixedMel: true, chorusVoice: 'choirLead',
+      bassSeq: 'R.R.R.R.R.R.R.R.',
+      drums: { kick: 'x.....x.x.......', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '....x.......x...' },
+      // 簡譜 1=D（小調）：1→0、7,→-1、1'→7；長度以 16 分音符為單位
+      mel: ['0/4 0/4 0/2 2/2 3/2 4/2 5/4 5/4 4/8', '3/4 3/4 2/2 3/2 2/2 0/2 1/16', '0/4 0/4 0/2 2/2 3/2 4/2 5/4 5/4 4/8', '3/4 3/4 2/4 1/4 0/12 r/4'],
+      verse: ['0/4 0/4 0/2 1/2 2/2 3/2 4/8 3/4 2/4', '1/4 1/4 1/2 2/2 1/2 0/2 -1/16', '0/4 0/4 0/2 1/2 2/2 3/2 4/8 5/4 4/4', '3/4 3/4 2/4 1/4 0/16'],
+      chorusMel: ['7/12 6/2 5/2 4/16', '3/4 3/4 3/2 4/2 5/2 4/2 3/8 2/8', '7/12 6/2 5/2 4/16', '3/4 3/4 4/4 4/4 7/16'],
+    },
   ];
   // 解析旋律字串
   for (const s of SONGS) {
     const parse = (str) => { const out = []; let pos = 0; for (const tok of str.trim().split(/\s+/)) { const [d, l] = tok.split('/'); const len = +l; if (d !== 'r') out.push([pos, +d, len]); pos += len; } return out; };
     s.leadSeq = s.mel.map(parse);
+    if (s.verse) s.verseSeq = s.verse.map(parse);
+    if (s.chorusMel) s.chorusSeq = s.chorusMel.map(parse);
     if (s.counter) s.counter.notes = s.counter.seq.map(parse);
   }
 
@@ -1108,10 +1120,12 @@
       //   副歌（第 3 階起）：依和弦生成的上揚旋律，音域更高、更長的音；第 4 階起疊八度
       const phrase = Math.floor(step / (S * 2));
       const sP = step % (S * 2);
-      if (!chorus && stage >= 1 && song.leadSeq && (stage >= 2 || phrase % 2 === 0)) {
-        const motif = song.leadSeq[phrase % song.leadSeq.length];
+      if (!chorus && song.leadSeq && (song.fixedMel || (stage >= 1 && (stage >= 2 || phrase % 2 === 0)))) {
+        // 固定旋律的歌：前奏是號角主題、第 2 階換成主歌旋律，不做移調變化
+        const seqs = song.verseSeq && stage >= 2 ? song.verseSeq : song.leadSeq;
+        const motif = seqs[phrase % seqs.length];
         const section = Math.floor(step / (S * 8));
-        const shift = section % 2 === 1 && song.leadSeq.length > 1 && phrase % 2 === 0 ? 2 : 0;
+        const shift = !song.fixedMel && section % 2 === 1 && song.leadSeq.length > 1 && phrase % 2 === 0 ? 2 : 0;
         const lv = stage >= 2 ? 0.8 : 0.55;
         for (let i = 0; i < motif.length; i++) {
           const [st, d, len] = motif[i];
@@ -1121,10 +1135,16 @@
         }
       }
       if (chorus) {
-        const notes = chorusBar(song, deg, cbar, S, Bt);
+        let notes;
+        if (song.chorusSeq) {
+          // 作好的副歌旋律：兩小節一句，跟著副歌小節數走
+          const m = song.chorusSeq[Math.floor(cbar / 2) % song.chorusSeq.length], off = (cbar % 2) * S;
+          notes = m.filter(([st]) => st >= off && st < off + S).map(([st, d, len]) => [st - off, d, len]);
+        } else notes = chorusBar(song, deg, cbar, S, Bt);
         for (const [st, d, len] of notes) {
           if (st !== s16) continue;
           this.leadNote(t, degToMidi(song, d, song.leadOct), p.stepDur * len * 0.94, song.lead, out, 1);
+          if (song.chorusVoice) this.leadNote(t, degToMidi(song, d, song.leadOct - 1), p.stepDur * len * 0.94, song.chorusVoice, p.outL, stage >= 4 ? 1 : 0.8);
           if (stage >= 4) this.leadNote(t, degToMidi(song, d, song.leadOct + 1), p.stepDur * len * 0.94, song.lead, p.outR, stage >= 5 ? 0.55 : 0.4);
         }
       }

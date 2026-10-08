@@ -3645,11 +3645,461 @@
     }
   }
 
+  // =========================================================
+  // 主場應援：棒球場看台、紅衣球迷、啦啦隊與吉祥物；隨著歌曲段落從白天 → 黃昏 → 夜晚
+  // =========================================================
+  // 味全龍風格吉祥物（正面 Q 版）：紅頭、白臉大鼻吻、藍色大眼、紅帽 W、金色鹿角與鬃毛、白色細條紋球衣
+  // 原點 = 腳底中央，高度約 170 單位；s = 縮放，t = 時間，cheer = 舉手幅度 0..1
+  function stadiumMascot(g, x, foot, s, t, cheer) {
+    t = t || 0; cheer = cheer == null ? 1 : cheer;
+    const RED = '#d8192a', RED_D = '#9a0f1c', RED_L = '#ff4a4a', INK = '#3a0a10', GOLD = '#ffc81e', GOLD_D = '#d08a10', WHITE = '#fffaf2', BLUE = '#2f8fe8';
+    const line = (w) => { g.strokeStyle = INK; g.lineWidth = w || 2.4; g.lineJoin = 'round'; g.lineCap = 'round'; };
+    const rg = (x0, y0, r, c0, c1) => { const q = g.createRadialGradient(x0 - r * 0.35, y0 - r * 0.4, r * 0.1, x0, y0, r); q.addColorStop(0, c0); q.addColorStop(1, c1); return q; };
+    const bob = Math.abs(Math.sin(t * 4)) * 2.5;
+    g.save(); g.translate(x, foot); g.scale(s, s); g.translate(0, -bob);
+
+    // ---- 尾巴（身後右側）
+    g.save(); line(2.4); g.fillStyle = RED;
+    g.beginPath(); g.moveTo(14, -52); g.bezierCurveTo(40, -50, 52, -60, 50 + Math.sin(t * 3) * 3, -78);
+    g.bezierCurveTo(44, -70, 34, -62, 16, -66); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = GOLD; g.beginPath(); g.moveTo(50 + Math.sin(t * 3) * 3, -78); g.lineTo(58, -92); g.lineTo(52, -80); g.lineTo(62, -84); g.lineTo(47, -72); g.closePath(); g.fill(); g.stroke();
+    g.restore();
+
+    // ---- 腳（紅鞋）與褲子
+    for (const sx of [-1, 1]) {
+      line(2.4); g.fillStyle = WHITE; g.beginPath(); g.roundRect(sx * 13 - 9, -40, 18, 26, 6); g.fill(); g.stroke();
+      g.strokeStyle = RED; g.lineWidth = 2.2; g.beginPath(); g.moveTo(sx * 13 + sx * 8, -38); g.lineTo(sx * 13 + sx * 8, -16); g.stroke();
+      line(2.4); g.fillStyle = rg(sx * 15, -8, 16, RED_L, RED_D); g.beginPath(); g.ellipse(sx * 15, -7, 15, 8, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = WHITE; g.beginPath(); g.ellipse(sx * 15 + sx * 2, -3, 9, 2.6, 0, 0, Math.PI * 2); g.fill();
+    }
+    // ---- 身體（白色細條紋球衣）
+    g.save(); line(2.6);
+    g.beginPath(); g.moveTo(-26, -86); g.quadraticCurveTo(-32, -58, -25, -36); g.quadraticCurveTo(0, -30, 25, -36); g.quadraticCurveTo(32, -58, 26, -86); g.quadraticCurveTo(0, -94, -26, -86); g.closePath();
+    g.fillStyle = WHITE; g.fill(); g.save(); g.clip();
+    g.strokeStyle = 'rgba(200,30,40,0.45)'; g.lineWidth = 1; for (let k = -30; k <= 30; k += 6) { g.beginPath(); g.moveTo(k, -96); g.lineTo(k, -30); g.stroke(); }
+    const sh = g.createLinearGradient(-30, 0, 30, 0); sh.addColorStop(0, 'rgba(120,80,90,0.25)'); sh.addColorStop(0.45, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(120,80,90,0.3)'); g.fillStyle = sh; g.fillRect(-34, -96, 68, 70);
+    // 胸前紅色字樣條（不寫隊名，只用飄帶）
+    g.fillStyle = RED; g.beginPath(); g.moveTo(-20, -62); g.quadraticCurveTo(-2, -66, 20, -80); g.lineTo(20, -75); g.quadraticCurveTo(0, -60, -20, -58); g.closePath(); g.fill();
+    g.fillStyle = RED; g.font = 'bold 13px sans-serif'; g.textAlign = 'center'; g.fillText('85', 0, -46);
+    // 腰帶
+    g.fillStyle = RED_D; g.fillRect(-34, -44, 68, 6);
+    g.restore(); line(2.6); g.stroke();
+    // 領口紅邊
+    g.strokeStyle = RED; g.lineWidth = 3; g.beginPath(); g.moveTo(-10, -89); g.lineTo(0, -78); g.lineTo(10, -89); g.stroke();
+    g.restore();
+
+    // ---- 手臂：左手插腰，右手舉起加油
+    const arm = (sx, ang) => {
+      g.save(); g.translate(sx * 24, -82); g.rotate(ang);
+      line(2.4); g.fillStyle = WHITE; g.beginPath(); g.roundRect(-7, -2, 14, 16, 6); g.fill(); g.stroke(); // 袖子
+      g.fillStyle = RED; g.beginPath(); g.roundRect(-5.5, 12, 11, 14, 5); g.fill(); g.stroke();
+      g.fillStyle = rg(0, 31, 9, RED_L, RED_D); g.beginPath(); g.arc(0, 31, 8.5, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = WHITE; for (const a of [-0.8, 0, 0.8]) { g.beginPath(); g.ellipse(Math.sin(a) * 8, 31 + Math.cos(a) * 8, 2, 3.2, -a, 0, Math.PI * 2); g.fill(); g.stroke(); }
+      g.restore();
+    };
+    arm(-1, 0.5);
+    arm(1, -0.4 - cheer * (1.5 + Math.sin(t * 6) * 0.2));
+
+    // ---- 頭
+    g.save(); g.translate(0, -122); g.rotate(Math.sin(t * 2) * 0.04);
+    // 金色鬃毛（臉頰兩側）
+    for (const sx of [-1, 1]) {
+      g.fillStyle = GOLD; line(2.2); g.beginPath(); g.moveTo(sx * 30, -14);
+      g.lineTo(sx * 48, -16); g.lineTo(sx * 40, -6); g.lineTo(sx * 54, -2); g.lineTo(sx * 42, 6); g.lineTo(sx * 52, 14); g.lineTo(sx * 34, 16); g.closePath(); g.fill(); g.stroke();
+    }
+    // 頭部底色（紅）
+    line(2.8); g.fillStyle = rg(0, -4, 44, RED_L, RED); g.beginPath(); g.ellipse(0, -2, 38, 34, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    // 白色臉（眼睛區 + 大鼻吻）
+    g.fillStyle = WHITE; g.beginPath();
+    g.moveTo(-30, -8); g.bezierCurveTo(-32, -24, -14, -28, 0, -22); g.bezierCurveTo(14, -28, 32, -24, 30, -8);
+    g.bezierCurveTo(44, 2, 44, 30, 22, 36); g.bezierCurveTo(10, 40, -10, 40, -22, 36); g.bezierCurveTo(-44, 30, -44, 2, -30, -8); g.closePath();
+    const fg = g.createLinearGradient(0, -26, 0, 40); fg.addColorStop(0, '#ffffff'); fg.addColorStop(1, '#f2dcd0'); g.fillStyle = fg; g.fill(); g.stroke();
+    // 嘴巴（大笑）
+    g.fillStyle = '#7a0c18'; g.beginPath(); g.moveTo(-20, 18); g.quadraticCurveTo(0, 26, 20, 18); g.quadraticCurveTo(14, 34, 0, 34); g.quadraticCurveTo(-14, 34, -20, 18); g.closePath(); g.fill(); line(2.2); g.stroke();
+    g.fillStyle = '#ff7a8a'; g.beginPath(); g.ellipse(2, 30, 8, 3.6, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = WHITE; for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(sx * 14, 19.5); g.lineTo(sx * 10, 19.8); g.lineTo(sx * 12, 26); g.closePath(); g.fill(); line(1.2); g.stroke(); }
+    // 鼻孔
+    g.fillStyle = INK; for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(sx * 9, 8, 3, 4, sx * 0.4, 0, Math.PI * 2); g.fill(); }
+    // 鼻吻高光
+    g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.ellipse(-14, 2, 6, 3, -0.4, 0, Math.PI * 2); g.fill();
+    // 大眼睛
+    for (const sx of [-1, 1]) {
+      const ex = sx * 13, ey = -10;
+      line(2.4); g.fillStyle = '#fff'; g.beginPath(); g.ellipse(ex, ey, 11, 13, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+      const ig = g.createRadialGradient(ex + sx * 1, ey - 3, 1, ex + sx * 1, ey + 1, 9); ig.addColorStop(0, '#9fd8ff'); ig.addColorStop(1, BLUE);
+      g.fillStyle = ig; g.beginPath(); g.ellipse(ex + sx * 1.5, ey + 1, 7.5, 9, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#081a3a'; g.beginPath(); g.ellipse(ex + sx * 1.5, ey + 1.5, 4, 5.4, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(ex - 2, ey - 4, 3, 0, Math.PI * 2); g.fill(); g.beginPath(); g.arc(ex + 3, ey + 4, 1.4, 0, Math.PI * 2); g.fill();
+    }
+    // 金色鹿角（從帽子兩側伸出）
+    for (const sx of [-1, 1]) {
+      g.save(); g.scale(sx, 1); line(2.4); g.fillStyle = GOLD;
+      g.beginPath(); g.moveTo(24, -34); g.quadraticCurveTo(38, -48, 40, -66); g.lineTo(46, -64); g.quadraticCurveTo(46, -52, 42, -44);
+      g.lineTo(54, -52); g.lineTo(56, -46); g.quadraticCurveTo(44, -36, 32, -28); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = GOLD_D; g.lineWidth = 1.2; g.beginPath(); g.moveTo(30, -36); g.quadraticCurveTo(38, -46, 40, -58); g.stroke();
+      g.restore();
+    }
+    // 紅色棒球帽
+    line(2.8); g.fillStyle = rg(0, -36, 36, RED_L, RED_D);
+    g.beginPath(); g.moveTo(-34, -22); g.bezierCurveTo(-36, -58, 36, -58, 34, -22); g.quadraticCurveTo(0, -30, -34, -22); g.closePath(); g.fill(); g.stroke();
+    g.strokeStyle = 'rgba(80,0,10,0.5)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(0, -50); g.lineTo(0, -27); g.stroke();
+    g.fillStyle = RED_D; line(2.4); g.beginPath(); g.ellipse(0, -50, 4, 2, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    // 帽簷
+    g.fillStyle = RED; g.beginPath(); g.moveTo(-30, -24); g.quadraticCurveTo(0, -34, 30, -24); g.quadraticCurveTo(0, -18, -30, -24); g.closePath(); g.fill(); line(2.4); g.stroke();
+    // 帽徽：白色 W
+    g.save(); g.translate(0, -39); g.lineJoin = 'miter';
+    g.strokeStyle = INK; g.lineWidth = 6.5; g.beginPath(); g.moveTo(-10, -6); g.lineTo(-5, 7); g.lineTo(0, -2); g.lineTo(5, 7); g.lineTo(10, -6); g.stroke();
+    g.strokeStyle = '#fff'; g.lineWidth = 3.6; g.stroke();
+    g.restore();
+    g.restore();
+
+    g.restore();
+  }
+
+  // 畫一張完整的球場（設計尺寸寬 412），NIGHT：0 白天 / 0.5 黃昏 / 1 夜晚
+  function stadiumPaint(g, W, H, NIGHT) {
+    let seed = 5; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const rand = (a, b) => a + rnd() * (b - a);
+    const pick = (a) => a[(rnd() * a.length) | 0];
+    const circ = (x, y, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); };
+    const ell = (x, y, rx, ry, col, rot) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, TAU); g.fill(); };
+    const rr = (x, y, w, h, r, col) => { g.fillStyle = col; g.beginPath(); g.roundRect(x, y, w, h, r); g.fill(); };
+    const glow = (x, y, r, col, a) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); };
+    const C = { red: '#e23b3f', dred: '#b3262e', clay: '#b83a30', gold: '#f7c548', cream: '#fff3dc', green: '#5db95a', dgreen: '#4aa34c', navy: '#2b3a78', wood: '#c08246' };
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    const mixc = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    const rgbs = (a) => `rgb(${a[0]},${a[1]},${a[2]})`;
+    const skyAt = (k) => { // k: 0 day / 0.5 dusk / 1 night
+      const D = [[110, 195, 240], [185, 228, 248], [244, 247, 238]], U = [[74, 90, 168], [240, 138, 122], [255, 210, 138]], N = [[5, 10, 36], [22, 32, 90], [74, 58, 102]];
+      const [A, B, t] = k < 0.5 ? [D, U, k / 0.5] : [U, N, (k - 0.5) / 0.5];
+      return A.map((c, i) => mixc(c, B[i], t));
+    };
+    const bulbs = [], lamps = [];
+    const SKIN = ['#ffd9b8', '#f5c49c', '#e8ab7c', '#c98a5e', '#8d5a3a'];
+    const HAIR = ['#2a1a14', '#4a2c1c', '#8a5a2a', '#e0a040', '#1a1a2a', '#a03020'];
+
+    // ---------- 人物（Q 版，大頭小身體） ----------
+    function person(x, foot, h, o) {
+      const skin = o.skin || pick(SKIN), hair = o.hair || pick(HAIR);
+      const headR = h * 0.215, headY = foot - h + headR + 1;
+      const bw = h * 0.34, bt = headY + headR * 0.82, bh = h * 0.36;
+      // 腿
+      rr(x - bw * 0.42, bt + bh - 2, bw * 0.34, foot - (bt + bh) + 2, 2, o.pants || '#f4eee4');
+      rr(x + bw * 0.08, bt + bh - 2, bw * 0.34, foot - (bt + bh) + 2, 2, o.pants || '#f4eee4');
+      rr(x - bw * 0.46, foot - 2.5, bw * 0.42, 3, 1.5, '#3a2a2a'); rr(x + bw * 0.04, foot - 2.5, bw * 0.42, 3, 1.5, '#3a2a2a');
+      // 手臂（在身體後）
+      g.lineCap = 'round'; g.lineWidth = h * 0.085; g.strokeStyle = o.sleeve || o.top;
+      const armUp = (side, dx, dy) => { g.beginPath(); g.moveTo(x + side * bw * 0.46, bt + 3); g.lineTo(x + side * bw * 0.46 + dx, bt + 3 + dy); g.stroke(); };
+      let hands = [];
+      if (o.arms === 'up') { armUp(-1, -h * 0.17, -h * 0.28); armUp(1, h * 0.17, -h * 0.28); hands = [[x - bw * 0.46 - h * 0.17, bt + 3 - h * 0.28], [x + bw * 0.46 + h * 0.17, bt + 3 - h * 0.28]]; }
+      else if (o.arms === 'one') { armUp(-1, -h * 0.05, h * 0.2); armUp(1, h * 0.14, -h * 0.3); hands = [null, [x + bw * 0.46 + h * 0.14, bt + 3 - h * 0.3]]; }
+      else if (o.arms === 'bat') { armUp(-1, h * 0.14, -h * 0.02); armUp(1, h * 0.17, -h * 0.05); }
+      else { armUp(-1, -h * 0.04, h * 0.22); armUp(1, h * 0.04, h * 0.22); }
+      for (const hd of hands) if (hd) circ(hd[0], hd[1], h * 0.055, skin);
+      // 身體
+      rr(x - bw / 2, bt, bw, bh, h * 0.07, o.top);
+      g.fillStyle = 'rgba(0,0,0,0.1)'; g.fillRect(x - bw / 2, bt + bh * 0.7, bw, bh * 0.3);
+      if (o.stripe) { g.fillStyle = o.stripe; g.fillRect(x - bw / 2, bt + bh * 0.18, bw, bh * 0.1); }
+      if (o.star) circ(x + bw * 0.22, bt + bh * 0.46, h * 0.04, '#fff'); // 左胸白色圓點
+      // 頭
+      if (!o.cap) { ell(x, headY - headR * 0.1, headR * 1.06, headR * 1.05, hair); }
+      circ(x, headY + headR * 0.08, headR, skin);
+      if (!o.cap) { g.fillStyle = hair; g.beginPath(); g.ellipse(x, headY - headR * 0.55, headR * 1.02, headR * 0.5, 0, Math.PI, 0); g.fill(); }
+      if (o.pony) { ell(x + headR * 1.0, headY + headR * 0.1, headR * 0.35, headR * 0.7, hair, 0.4); }
+      // 臉
+      circ(x - headR * 0.38, headY + headR * 0.12, headR * 0.1, '#2a1a1a'); circ(x + headR * 0.38, headY + headR * 0.12, headR * 0.1, '#2a1a1a');
+      g.strokeStyle = '#8a3a2a'; g.lineWidth = Math.max(0.8, headR * 0.09); g.lineCap = 'round';
+      g.beginPath(); g.arc(x, headY + headR * 0.32, headR * 0.28, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+      circ(x - headR * 0.62, headY + headR * 0.32, headR * 0.17, 'rgba(255,120,120,0.45)'); circ(x + headR * 0.62, headY + headR * 0.32, headR * 0.17, 'rgba(255,120,120,0.45)');
+      // 帽子
+      if (o.cap) {
+        g.fillStyle = o.cap; g.beginPath(); g.ellipse(x, headY - headR * 0.18, headR * 1.04, headR * 0.92, 0, Math.PI, 0); g.fill();
+        g.fillRect(x - headR * 1.04, headY - headR * 0.2, headR * 2.08, headR * 0.16);
+        g.beginPath(); g.ellipse(x + headR * 0.55, headY - headR * 0.12, headR * 0.72, headR * 0.2, 0, 0, TAU); g.fill();
+        { const wx = x, wy = headY - headR * 0.6, ww = headR * 0.3, wh = headR * 0.22; // 帽徽：低調的小 W
+          g.strokeStyle = 'rgba(255,240,220,0.75)'; g.lineWidth = Math.max(0.8, headR * 0.09); g.lineJoin = 'round'; g.lineCap = 'round';
+          g.beginPath(); g.moveTo(wx - ww, wy - wh); g.lineTo(wx - ww * 0.5, wy + wh); g.lineTo(wx, wy - wh * 0.3); g.lineTo(wx + ww * 0.5, wy + wh); g.lineTo(wx + ww, wy - wh); g.stroke(); }
+      }
+      return hands;
+    }
+    function flag(x, y, h, col, t) {
+      g.strokeStyle = '#7a5a3a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x, y + h * 0.9); g.lineTo(x, y - h); g.stroke();
+      const fw = h * 1.1, fh = h * 0.72;
+      g.fillStyle = col; g.beginPath(); g.moveTo(x, y - h);
+      for (let i = 0; i <= 8; i++) g.lineTo(x + fw * i / 8, y - h + Math.sin(i * 0.9 + t) * 2.2);
+      for (let i = 8; i >= 0; i--) g.lineTo(x + fw * i / 8, y - h + fh + Math.sin(i * 0.9 + t) * 2.2);
+      g.closePath(); g.fill();
+      circ(x + fw * 0.5, y - h + fh * 0.5 + 1, fh * 0.26, C.gold);
+    }
+
+    // ---------- 天空與雲 ----------
+    const sk = skyAt(NIGHT);
+    const sky = g.createLinearGradient(0, 0, 0, H * 0.7); sky.addColorStop(0, rgbs(sk[0])); sky.addColorStop(0.6, rgbs(sk[1])); sky.addColorStop(1, rgbs(sk[2]));
+    g.fillStyle = sky; g.fillRect(0, 0, W, H);
+    if (NIGHT > 0.55) {
+      const a = clamp01((NIGHT - 0.55) / 0.35);
+      for (let i = 0; i < 110; i++) { g.fillStyle = `rgba(255,250,235,${rand(0.3, 0.95) * a})`; const r = rnd() < 0.1 ? 1.5 : 0.9; g.beginPath(); g.arc(rand(0, W), rand(0, H * 0.55), r, 0, TAU); g.fill(); }
+      // 月亮（落在左側看得見的位置）
+      const mx = 50, my = 392;
+      g.globalAlpha = a; glow(mx, my, 70, '200,215,255', 0.35); circ(mx, my, 20, '#fff8e0'); g.fillStyle = 'rgba(200,190,160,0.35)'; for (const [dx, dy, r] of [[-6, -4, 4], [6, 5, 3], [3, -8, 2.4]]) { g.beginPath(); g.arc(mx + dx, my + dy, r, 0, TAU); g.fill(); } g.globalAlpha = 1;
+      g.globalAlpha = a; glow(mx, my, 70, '200,215,255', 0.0); g.globalAlpha = 1;
+    }
+    function cloud(x, y, s) { for (const [dx, dy, r] of [[-26, 4, 16], [-8, -6, 21], [14, -2, 19], [32, 6, 14], [0, 8, 18]]) circ(x + dx * s, y + dy * s, r * s, '#fff'); rr(x - 40 * s, y + 6 * s, 84 * s, 14 * s, 7 * s, '#fff'); g.fillStyle = 'rgba(150,200,235,0.25)'; g.fillRect(x - 36 * s, y + 14 * s, 76 * s, 6 * s); }
+    cloud(70, 118, 1.1); cloud(330, 70, 0.9); cloud(60, 330, 0.8); cloud(350, 410, 1.0); cloud(290, 230, 0.7); cloud(130, 470, 0.9);
+
+    // 彩旗串
+    function bunting(x0, y0, x1, y1, sag, n) {
+      g.strokeStyle = '#8a6a4a'; g.lineWidth = 1.3; g.beginPath();
+      for (let i = 0; i <= 40; i++) { const t = i / 40; const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t + Math.sin(t * Math.PI) * sag; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n; const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t + Math.sin(t * Math.PI) * sag;
+        g.fillStyle = [C.red, '#fff', C.gold][i % 3]; g.beginPath(); g.moveTo(x - 8, y); g.lineTo(x + 8, y); g.lineTo(x, y + 18); g.fill(); bulbs.push([x, y + 2]);
+        if (i % 3 === 1) { g.fillStyle = C.red; g.beginPath(); g.arc(x, y + 6, 2.4, 0, TAU); g.fill(); }
+      }
+    }
+    bunting(-4, 6, W + 4, 6, 26, 15);
+    bunting(-4, 38, W + 4, 52, 20, 13);
+    // 氣球
+    function balloon(x, y, r, col) { g.strokeStyle = 'rgba(80,60,60,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y + r * 1.15); g.quadraticCurveTo(x - 4, y + r * 2.4, x + 2, y + r * 3.6); g.stroke(); ell(x, y, r * 0.9, r, col); g.fillStyle = col; g.beginPath(); g.moveTo(x - 3, y + r * 0.95); g.lineTo(x + 3, y + r * 0.95); g.lineTo(x, y + r * 1.2); g.fill(); ell(x - r * 0.3, y - r * 0.35, r * 0.18, r * 0.3, 'rgba(255,255,255,0.55)', 0.5); }
+    balloon(24, 420, 14, C.red); balloon(48, 470, 11, '#fff'); balloon(386, 470, 14, C.red); balloon(362, 505, 11, '#fff'); balloon(20, 500, 10, '#fff');
+
+    // ---------- 球場燈塔（白天是灰色的鐵塔，晚上才會亮）----------
+    function tower(x, topY, baseY, bw) {
+      g.strokeStyle = '#8c96ac'; g.lineWidth = 4; g.beginPath(); g.moveTo(x, baseY); g.lineTo(x, topY); g.stroke();
+      g.strokeStyle = 'rgba(120,130,150,0.7)'; g.lineWidth = 1.4;
+      for (let yy = topY + 18; yy < baseY; yy += 26) { g.beginPath(); g.moveTo(x - 3, yy); g.lineTo(x + 3, yy + 13); g.moveTo(x + 3, yy); g.lineTo(x - 3, yy + 13); g.stroke(); }
+      g.fillStyle = '#7a859c'; g.fillRect(x - bw / 2, topY - bw * 0.55, bw, bw * 0.55);
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) { g.fillStyle = '#d6dcea'; g.beginPath(); g.arc(x - bw / 2 + (i + 0.5) * bw / 6, topY - bw * 0.55 + (j + 0.5) * bw * 0.55 / 3, bw / 6 * 0.36, 0, TAU); g.fill(); }
+      lamps.push([x, topY - bw * 0.275, bw]);
+    }
+    tower(W * 0.045, H * 0.1, H * 0.64, 54); tower(W * 0.955, H * 0.1, H * 0.64, 54);
+    tower(W * 0.2, H * 0.4, H * 0.62, 36); tower(W * 0.8, H * 0.4, H * 0.62, 36);
+
+
+    // ---------- 看台：三層，每層一排觀眾 + 木板座椅牆 ----------
+    const standTop = H * 0.605;
+    g.fillStyle = '#f6e3d2'; g.beginPath(); g.moveTo(0, H * 0.82); g.lineTo(0, standTop + 24); g.quadraticCurveTo(W / 2, standTop - 18, W, standTop + 24); g.lineTo(W, H * 0.82); g.fill();
+    g.fillStyle = 'rgba(210,150,120,0.28)'; g.beginPath(); g.moveTo(0, standTop + 24); g.quadraticCurveTo(W / 2, standTop - 18, W, standTop + 24); g.lineTo(W, standTop + 36); g.quadraticCurveTo(W / 2, standTop - 6, 0, standTop + 36); g.fill();
+    const flagsAll = [];
+    for (let row = 0; row < 3; row++) {
+      const baseY = standTop + 44 + row * 30, hh = 34 + row * 4;
+      const step = 29 + row * 2;
+      for (let x = 12 + (row % 2) * 12; x < W; x += step) {
+        const curve = Math.sin(x / W * Math.PI) * -18 + 18;
+        const fy = baseY + curve * (1 - row * 0.3) * 0.8;
+        const jersey = rnd() < 0.78;
+        const o = { top: jersey ? C.red : pick(['#fff', C.gold, '#fff', C.navy]), stripe: jersey && rnd() < 0.3 ? '#fff' : null, star: jersey && rnd() < 0.3, cap: jersey && rnd() < 0.45 ? C.red : null, arms: rnd() < 0.5 ? 'up' : rnd() < 0.5 ? 'one' : 'down', pony: rnd() < 0.2 };
+        const hands = person(x + rand(-2, 2), fy, hh, o);
+        if (o.arms === 'one' && hands[1] && rnd() < 0.7) flagsAll.push([hands[1][0], hands[1][1] + 6, 22 + row * 3]);
+        else if (o.arms === 'up' && hands[0] && rnd() < 0.18) flagsAll.push([hands[0][0], hands[0][1] + 6, 24]);
+      }
+      // 座椅牆（紅白木板）
+      const wy = baseY + (row === 2 ? 4 : 2) + Math.max(0, 0);
+      g.fillStyle = row % 2 ? '#d84a40' : '#c23a36';
+      g.beginPath(); g.moveTo(0, wy + 4); for (let x = 0; x <= W; x += 6) g.lineTo(x, wy + 4 + Math.sin(x / W * Math.PI) * -14 * (1 - row * 0.3) * 0.8 + 14 * (1 - row * 0.3) * 0.8); g.lineTo(W, wy + 26); g.lineTo(0, wy + 26); g.fill();
+    }
+    const tt = 0;
+    for (const [fx, fy2, fh] of flagsAll) flag(fx, fy2, fh, C.red, fx * 0.1 + tt);
+
+    // ---------- 木板圍欄與廣告小旗 ----------
+    const fenceY = H * 0.78;
+    g.fillStyle = '#a82a30'; g.fillRect(0, standTop + 128, W, fenceY - (standTop + 128));
+    g.fillStyle = C.gold; g.fillRect(0, standTop + 128, W, 2.5);
+    g.fillStyle = 'rgba(255,255,255,0.8)'; for (let x = 8; x < W; x += 20) { g.beginPath(); g.arc(x, standTop + 128 + (fenceY - standTop - 128) / 2 + 1, 2, 0, TAU); g.fill(); }
+    g.fillStyle = C.wood; g.fillRect(0, fenceY, W, 18);
+    g.fillStyle = 'rgba(0,0,0,0.12)'; for (let y = fenceY + 6; y < fenceY + 18; y += 6) g.fillRect(0, y, W, 1);
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(0, fenceY, W, 2);
+    for (let x = 10; x < W; x += 46) { rr(x, fenceY + 4, 34, 10, 2, [C.red, '#fff', C.gold, C.navy][((x / 46) | 0) % 4]); }
+
+    // ---------- 球場 ----------
+    const gy = fenceY + 18;
+    g.fillStyle = C.green; g.fillRect(0, gy, W, H - gy);
+    for (let i = -12; i < 14; i++) {
+      g.fillStyle = i % 2 ? 'rgba(120,205,110,0.55)' : 'rgba(60,150,70,0.4)';
+      g.beginPath(); g.moveTo(W / 2 + i * 16, gy); g.lineTo(W / 2 + i * 16 + 16, gy); g.lineTo(W / 2 + (i + 1) * 64, H); g.lineTo(W / 2 + i * 64, H); g.fill();
+    }
+    // 內野深紅土
+    const home = [W / 2, H * 0.985], b1 = [W * 0.82, H * 0.915], b2 = [W / 2, H * 0.845], b3 = [W * 0.18, H * 0.915];
+    g.fillStyle = C.clay; g.beginPath(); g.moveTo(home[0], home[1] + 14); g.lineTo(b1[0] + 26, b1[1]); g.lineTo(b2[0], b2[1] - 22); g.lineTo(b3[0] - 26, b3[1]); g.closePath(); g.fill();
+    g.fillStyle = C.green; g.beginPath(); g.moveTo(home[0], home[1] - 26); g.lineTo(b1[0] - 24, b1[1]); g.lineTo(b2[0], b2[1] + 18); g.lineTo(b3[0] + 24, b3[1]); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 2.4;
+    g.beginPath(); g.moveTo(home[0], home[1] + 6); g.lineTo(b1[0] + 70, b1[1] - 50); g.moveTo(home[0], home[1] + 6); g.lineTo(b3[0] - 70, b3[1] - 50); g.stroke();
+    ell(W / 2, H * 0.915, 16, 7, C.clay);
+    for (const [bx, by] of [b1, b2, b3]) { g.save(); g.translate(bx, by); g.scale(1, 0.55); g.rotate(Math.PI / 4); g.fillStyle = '#fff'; g.fillRect(-7, -7, 14, 14); g.restore(); }
+    g.fillStyle = '#fff'; g.beginPath(); g.moveTo(home[0] - 8, home[1] + 4); g.lineTo(home[0] + 8, home[1] + 4); g.lineTo(home[0] + 8, home[1] + 9); g.lineTo(home[0], home[1] + 15); g.lineTo(home[0] - 8, home[1] + 9); g.fill();
+    // 場上球員（紅色球衣、大頭）
+    const R = { top: C.red, pants: '#fff', cap: C.red, star: true };
+    person(b1[0] + 4, b1[1] + 12, 64, Object.assign({ arms: 'one' }, R));      // 一壘
+    person(b3[0] - 4, b3[1] + 12, 64, Object.assign({ arms: 'one' }, R));      // 三壘
+    person(W / 2, H * 0.935, 66, Object.assign({ arms: 'down' }, R));          // 投手
+    person(W / 2 - 34, home[1] + 2, 72, Object.assign({ arms: 'bat', cap: C.dred }, R));   // 打者
+    g.strokeStyle = '#d9b070'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.moveTo(W / 2 - 14, home[1] - 52); g.lineTo(W / 2 - 4, home[1] - 92); g.stroke();
+    circ(W / 2 + 40, home[1] - 90, 5, '#fff');
+
+    // ---------- 兩側的啦啦隊與吉祥物（落在畫面左右兩側看得見的位置）----------
+    // 啦啦隊（左）
+    function pom(x, y, col) { for (let i = 0; i < 9; i++) { const a = i / 9 * TAU; ell(x + Math.cos(a) * 5, y + Math.sin(a) * 5, 2.6, 4.5, col, a); } circ(x, y, 4, '#fff7e0'); }
+    for (const [x, hh, hair] of [[34, 78, '#2a1a14'], [72, 74, '#8a5a2a']]) {
+      const hands = person(x, H * 0.665, hh, { top: C.red, stripe: '#fff', pants: '#fff', arms: 'up', pony: true, hair });
+      hands.forEach((hd, i) => hd && pom(hd[0], hd[1] - 4, i ? C.gold : C.red));
+    }
+
+    // ---------- 日夜：整體調色 + 夜晚的燈光 ----------
+    {
+      const t = NIGHT;
+      const tint = t <= 0.5 ? mixc([255, 255, 255], [255, 205, 190], t / 0.5) : mixc([255, 205, 190], [112, 128, 205], (t - 0.5) / 0.5);
+      g.globalCompositeOperation = 'multiply'; g.fillStyle = rgbs(tint); g.fillRect(0, 0, W, H);
+      g.globalCompositeOperation = 'lighter';
+      const dusk = clamp01(1 - Math.abs(t - 0.5) / 0.32);
+      if (dusk > 0) glow(W / 2, H * 0.63, W * 0.95, '255,140,70', 0.3 * dusk);
+      const L = clamp01((t - 0.42) / 0.4);
+      if (L > 0) {
+        glow(W * 0.3, H * 0.92, 240, '215,255,190', 0.14 * L); glow(W * 0.72, H * 0.92, 240, '215,255,190', 0.14 * L);
+        glow(W / 2, H * 0.72, W * 0.8, '255,225,190', 0.08 * L);
+        for (const [x, y, bw] of lamps) {
+          glow(x, y, bw * 2.6, '255,242,205', 0.5 * L); glow(x, y, bw * 1.0, '255,255,255', 0.8 * L);
+          const ang = x < W / 2 ? 1.2 : Math.PI - 1.2;
+          g.save(); g.translate(x, y); g.rotate(ang);
+          const gr = g.createLinearGradient(0, 0, 420, 0); gr.addColorStop(0, `rgba(255,246,220,${0.15 * L})`); gr.addColorStop(1, 'rgba(255,246,220,0)');
+          g.fillStyle = gr; g.beginPath(); g.moveTo(0, -4); g.lineTo(420, -90); g.lineTo(420, 90); g.lineTo(0, 4); g.fill(); g.restore();
+        }
+        for (const [x, y, bw] of lamps) for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) { g.fillStyle = `rgba(255,255,245,${L})`; g.beginPath(); g.arc(x - bw / 2 + (i + 0.5) * bw / 6, y - bw * 0.275 + (j + 0.5) * bw * 0.55 / 3 + bw * 0.275 - bw * 0.275 + 0, bw / 6 * 0.4, 0, TAU); g.fill(); }
+            for (const [x, y] of bulbs) { glow(x, y, 8, '255,210,130', 0.8 * L); g.fillStyle = `rgba(255,240,200,${L})`; g.beginPath(); g.arc(x, y, 1.8, 0, TAU); g.fill(); }
+        seed = 99;
+        for (let i = 0; i < 110; i++) glow(rand(0, W), rand(H * 0.6, H * 0.77), rand(3.5, 6.5), rnd() < 0.85 ? '255,60,45' : '255,200,90', 0.42 * L);
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
+    // 暗角與整體色調：稍微柔化
+    const vg = g.createLinearGradient(0, 0, 0, H); vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(20,50,20,0.12)'); g.fillStyle = vg; g.fillRect(0, 0, W, H);
+
+
+  }
+  function balloonSprite(col, shine) {
+    const S = layer(30, 60), g = S.g;
+    g.strokeStyle = 'rgba(80,60,60,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(15, 30); g.quadraticCurveTo(11, 44, 17, 58); g.stroke();
+    const gr = g.createRadialGradient(11, 10, 1, 15, 15, 15); gr.addColorStop(0, shine); gr.addColorStop(1, col);
+    g.fillStyle = gr; g.beginPath(); g.ellipse(15, 15, 12, 14, 0, 0, TAU); g.fill();
+    g.fillStyle = col; g.beginPath(); g.moveTo(12, 28); g.lineTo(18, 28); g.lineTo(15, 32); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.55)'; g.beginPath(); g.ellipse(10, 9, 2.5, 4.5, 0.5, 0, TAU); g.fill();
+    return S;
+  }
+  class Stadium {
+    constructor(low) { this.low = low; this.night = 0.12; this.target = 0.12; this.cheer = 0; this.balloons = []; this.sparks = []; this.confetti = []; this.fwT = 0; this.stage = 1; }
+    resize(w, h) {
+      this.w = w; this.h = h;
+      this.sc = Math.min(w / 412, h / 860);
+      this.W = w / this.sc; this.H = h / this.sc;
+      this.keys = [null, null, null]; // 白天 / 黃昏 / 夜晚，用到時才畫
+      const s = Math.min(root.devicePixelRatio || 1, 2);
+      this.mbox = { x: this.W * 0.855 - 52, y: this.H * 0.668 - 128, w: 104, h: 134 };
+      this.mcv = document.createElement('canvas');
+      this.mcv.width = Math.ceil(this.mbox.w * this.sc * s); this.mcv.height = Math.ceil(this.mbox.h * this.sc * s);
+      this.mg = this.mcv.getContext('2d');
+      this.mpx = this.sc * s;
+      this.bl = [[balloonSprite('#d8202c', '#ff8a80'), balloonSprite('#f2f0f4', '#ffffff')], [balloonSprite('#6a1a3c', '#a04060'), balloonSprite('#8890b8', '#b8c0e0')]];
+      this.balloons = [];
+      for (let i = 0; i < (this.low ? 3 : 6); i++) this.balloons.push(this.newBalloon(true));
+    }
+    key(k) {
+      if (!this.keys[k]) {
+        const L = layer(this.w, this.h);
+        L.g.save(); L.g.scale(this.sc, this.sc); stadiumPaint(L.g, this.W, this.H, k / 2); L.g.restore();
+        this.keys[k] = L;
+      }
+      return this.keys[k].cv;
+    }
+    newBalloon(anywhere, x) {
+      return { x: x != null ? x : rand(0, this.W), y: anywhere ? rand(0.15, 0.7) * this.H : this.H * rand(0.62, 0.72), vy: rand(14, 26), ph: rand(0, TAU), z: rand(0.6, 1.1), k: Math.random() < 0.6 ? 0 : 1 };
+    }
+    setIntensity(i) {
+      this.stage = i;
+      this.target = [0, 0.15, 0.32, 0.55, 0.8, 1][Math.max(0, Math.min(5, Math.round(i)))];
+    }
+    update(dt) {
+      const s = dt / 1000;
+      this.night += (this.target - this.night) * (1 - Math.exp(-s / 3.5));
+      this.cheer *= Math.pow(0.15, s);
+      for (const b of this.balloons) { b.y -= b.vy * b.z * s; b.ph += s * 1.3; }
+      this.balloons = this.balloons.filter((b) => b.y > -60);
+      while (this.balloons.length < (this.low ? 3 : 6)) this.balloons.push(this.newBalloon(false));
+      for (const p of this.sparks) { p.vy += 40 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s; }
+      this.sparks = this.sparks.filter((p) => p.life > 0);
+      for (const p of this.confetti) { p.vy = Math.min(p.vy + 90 * s, 60); p.vx *= Math.pow(0.4, s); p.x += (p.vx + Math.sin(p.ph) * 18) * s; p.y += p.vy * s; p.ph += s * 6; p.r += p.vr * s; }
+      this.confetti = this.confetti.filter((p) => p.y < this.H + 10);
+      // 最終副歌的夜晚：自動放煙火
+      if (this.night > 0.7 && this.stage >= 5) { this.fwT -= s; if (this.fwT <= 0) { this.fwT = rand(1.4, 2.6); this.firework(rand(0.1, 0.9) * this.W, rand(0.08, 0.35) * this.H, false); } }
+    }
+    firework(x, y, big) {
+      const n = (big ? 60 : 36) * (this.low ? 0.5 : 1), col = Math.random() < 0.6 ? '255,90,80' : Math.random() < 0.5 ? '255,255,255' : '255,200,120';
+      for (let i = 0; i < n; i++) { const a = (i / n) * TAU, v = rand(50, big ? 130 : 95); this.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.9, 1.5), col }); }
+    }
+    draw(g, t, beat, B) {
+      const w = this.w, h = this.h, sc = this.sc, N = this.night;
+      // 白天 / 黃昏 / 夜晚三張底圖交叉淡入
+      const k = N < 0.5 ? 0 : 1, f = N < 0.5 ? N / 0.5 : (N - 0.5) / 0.5;
+      g.drawImage(this.key(k), 0, 0, w, h);
+      if (f > 0.01) { g.globalAlpha = f; g.drawImage(this.key(k + 1), 0, 0, w, h); g.globalAlpha = 1; }
+      g.save(); g.scale(sc, sc);
+      const W = this.W, H = this.H;
+      // 氣球（紅白兩色），晚上換成暗色版本
+      for (const b of this.balloons) {
+        const bx = b.x + Math.sin(b.ph) * 6, bw = 22 * b.z, bh = bw * 2;
+        g.globalAlpha = 1 - N * 0.6; g.drawImage(this.bl[0][b.k].cv, bx - bw / 2, b.y - bh / 4, bw, bh);
+        if (N > 0.05) { g.globalAlpha = N * 0.6; g.drawImage(this.bl[1][b.k].cv, bx - bw / 2, b.y - bh / 4, bw, bh); }
+      }
+      g.globalAlpha = 1;
+      // 夜晚：燈塔隨節拍閃亮
+      const L = Math.max(0, Math.min(1, (N - 0.42) / 0.4));
+      if (L > 0) {
+        g.globalCompositeOperation = 'lighter';
+        for (const [x, y, r] of [[W * 0.045, H * 0.1 - 15, 54], [W * 0.955, H * 0.1 - 15, 54], [W * 0.2, H * 0.4 - 10, 36], [W * 0.8, H * 0.4 - 10, 36]]) glow(g, x, y, r * (1.6 + beat * 0.8), '255,245,215', (0.12 + beat * 0.25) * L);
+        g.globalCompositeOperation = 'source-over';
+      }
+      // 吉祥物：跟著節拍跳、揮手（畫在小畫布上再依時段調色）
+      const mb = this.mbox, mg = this.mg, px = this.mpx;
+      mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, this.mcv.width, this.mcv.height);
+      mg.globalCompositeOperation = 'source-over';
+      mg.setTransform(px, 0, 0, px, -mb.x * px, -mb.y * px);
+      stadiumMascot(mg, W * 0.855, H * 0.668 - this.cheer * 8, 0.62, t / 1000 + beat * 0.15, 0.7 + Math.min(0.5, beat * 0.5 + this.cheer));
+      mg.setTransform(1, 0, 0, 1, 0, 0);
+      if (N > 0.02) {
+        mg.globalCompositeOperation = 'source-atop';
+        mg.fillStyle = N < 0.5 ? `rgba(255,110,70,${0.18 * N / 0.5})` : `rgba(22,30,90,${0.18 + 0.32 * (N - 0.5) / 0.5})`;
+        mg.fillRect(0, 0, this.mcv.width, this.mcv.height);
+        mg.globalCompositeOperation = 'source-over';
+      }
+      g.drawImage(this.mcv, mb.x, mb.y, mb.w, mb.h);
+      // 紙花與煙火
+      for (const p of this.confetti) { g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.fillRect(-2.5, -1.5, 5, 3); g.restore(); }
+      if (this.sparks.length) {
+        g.globalCompositeOperation = 'lighter';
+        for (const p of this.sparks) { const a = Math.min(1, p.life) * 0.9; g.fillStyle = `rgba(${p.col},${a})`; g.beginPath(); g.arc(p.x, p.y, 1.8, 0, TAU); g.fill(); glow(g, p.x, p.y, 6, p.col, a * 0.35); }
+        g.globalCompositeOperation = 'source-over';
+      }
+      g.restore();
+    }
+    burst(d) {
+      this.cheer = Math.min(1.2, this.cheer + 0.3 * d.lines);
+      const W = this.W, H = this.H;
+      // 紙花從兩側噴出
+      const n = Math.min(this.low ? 20 : 50, d.lines * 10 + (d.lines >= 4 ? 20 : 0));
+      for (let i = 0; i < n; i++) {
+        const left = i % 2 === 0;
+        this.confetti.push({ x: left ? 0 : W, y: H * rand(0.55, 0.66), vx: (left ? 1 : -1) * rand(60, 160), vy: rand(-180, -90), ph: rand(0, TAU), r: rand(0, TAU), vr: rand(-6, 6), c: Math.random() < 0.6 ? '#e8303a' : '#ffffff' });
+      }
+      // 晚上加煙火
+      if (this.night > 0.45) { const m = Math.min(3, d.lines - 1 + (d.lines >= 4 ? 1 : 0)); for (let i = 0; i < m; i++) this.firework(rand(0.1, 0.9) * W, rand(0.06, 0.32) * H, d.lines >= 4); }
+      // 多放幾顆氣球
+      for (let i = 0; i < Math.min(3, d.lines - 1); i++) this.balloons.push(this.newBalloon(false, rand(0.05, 0.95) * W));
+    }
+  }
+
   root.LumenScenes = {
     星空: Starfield, 深海: DeepSea, 竹林: Bamboo, 極光: Aurora, 水墨: InkWash, 螢火森林: Firefly, 霓虹都市: NeonCity,
     敦煌: Dunhuang, 櫻花: Sakura, 冰晶洞窟: IceCave, 燈節: Lantern, 雨夜: RainyCity, 熔岩: Lava, 夕陽雲海: Sunset,
     長城: GreatWall, 荷塘月色: LotusPond, 仙山: FairyPeaks,
     土星環: Saturn, 楓紅: Maple, 海上風暴: Storm, 飛龍: Dragon,
-    景福宮: Gyeongbokgung, 韓屋月夜: HanokMoon, 首爾夜光: SeoulNight,
+    景福宮: Gyeongbokgung, 韓屋月夜: HanokMoon, 首爾夜光: SeoulNight, 主場應援: Stadium,
   };
 })(typeof self !== 'undefined' ? self : this);
