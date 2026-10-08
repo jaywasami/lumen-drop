@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-5';
+  const VERSION = '2026.10.08-6';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -136,9 +136,18 @@
     { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
     { name: '飛龍', accent: [255, 200, 80], style: 'gold', sub: '龍騰九霄' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
-    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！' },
+    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！', songs: ['主場應援', '龍光乍現'] },
   ];
   let themeIdx = 0;
+  // 有多首歌的關卡：每次來到這關就換下一首（輪播）
+  const songTurn = {};
+  function nextSong(i) {
+    const th = THEMES[i];
+    if (!th.songs) return th.name;
+    const k = songTurn[i] || 0;
+    songTurn[i] = k + 1;
+    return th.songs[k % th.songs.length];
+  }
   const accent = THEMES[0].accent.slice();
   const scenes = [];
   let scene = null;
@@ -627,7 +636,7 @@
         Snd.play('levelUp');
         if (vs) {
           // 對戰：沒有過場、沒有減速獎勵，場景與音樂慢慢轉換
-          Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
+          Snd.playSong(nextSong(idx), musicStage(), musicRate());
           setTheme(idx);
           popup([`LEVEL ${d.level}`, THEMES[idx].name], '#8be9ff');
           fx.rings.push({ t: 0, life: 1.1 });
@@ -638,7 +647,7 @@
           startTransition(idx, d.level);
           break;
         }
-        Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
+        Snd.playSong(nextSong(idx), musicStage(), musicRate());
         setTheme(idx);
         popup([`LEVEL ${d.level}`, '過關獎勵：速度放慢'], '#8be9ff');
         fx.rings.push({ t: 0, life: 1.1 });
@@ -745,7 +754,7 @@
     Snd.setBuild(false);
     Snd.setZone(false); zoneFx.on = 0; zoneFx.crescendo = false;
     intensity = musicStage();
-    Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
+    Snd.playSong(nextSong(idx), musicStage(), musicRate());
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
     showOverlay(null);
     touchEl.classList.toggle('hidden', settings.controls === 'off');
@@ -1327,7 +1336,7 @@
       tr.switched = true;
       tr.prev = scene;
       setTheme(tr.to, true);
-      Snd.playSong(THEMES[tr.to].name, musicStage(), musicRate());
+      Snd.playSong(nextSong(tr.to), musicStage(), musicRate());
       Snd.play('arrive');
       fx.flash = 1;
       fx.pulse = 1;
