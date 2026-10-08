@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-11';
+  const VERSION = '2026.10.08-12';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -44,14 +44,17 @@
   const sceneCanvas = document.createElement('canvas');
   const sceneCtx = sceneCanvas.getContext('2d', { alpha: false });
   let sdpr = 1;
-  const powerSave = () => settings.fx !== 'high';
+  // 特定關卡（球場）即使開省電也用完整畫質；離開後回到原本設定
+  let fxBoost = false;
+  const fxLevel = () => (fxBoost ? 'high' : settings.fx);
+  const powerSave = () => fxLevel() !== 'high';
   const touchEl = $('touch');
   const glCanvas = $('gl');
   let post = null;
   function setupPost() {
-    if (settings.fx === 'low') post = null;
+    if (fxLevel() === 'low') post = null;
     else if (!post) post = window.LumenPost && window.LumenPost.create(glCanvas);
-    if (post) post.setLight(settings.fx === 'balanced');
+    if (post) post.setLight(fxLevel() === 'balanced');
     document.body.classList.toggle('post-on', !!post && !post.lightMode);
     document.body.classList.toggle('post-light', !!post && post.lightMode);
   }
@@ -136,7 +139,7 @@
     { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
     { name: '飛龍', accent: [255, 200, 80], style: 'gold', sub: '龍騰九霄' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
-    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！', songs: ['主場應援', '龍光乍現'] },
+    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！', hiFx: true, songs: ['主場應援', '龍光乍現'] },
   ];
   let themeIdx = 0;
   // 有多首歌的關卡：每次進這關就從上次的下一首開始（記在本機，重開遊戲也接著輪），播完一首換下一首
@@ -161,13 +164,15 @@
 
   function getScene(i) {
     if (!scenes[i]) {
-      scenes[i] = new SCENES[THEMES[i].name](settings.fx === 'low');
+      scenes[i] = new SCENES[THEMES[i].name](!THEMES[i].hiFx && settings.fx === 'low');
       scenes[i].resize(vw, vh);
     }
     return scenes[i];
   }
   function setTheme(i, instant) {
     themeIdx = i;
+    const boost = !!THEMES[i].hiFx && settings.fx !== 'high';
+    if (boost !== fxBoost) { fxBoost = boost; if (vw) setSceneRes(); setupPost(); }
     touchEl.classList.toggle('light', !!THEMES[i].light);
     const next = getScene(i);
     if (next === scene) return;
@@ -306,13 +311,17 @@
 
   // ================= 版面 =================
   let dpr = 1, vw = 0, vh = 0, cell = 24, bx = 0, by = 0, sideW = 0, gap = 0, portrait = true;
+  function setSceneRes() {
+    const f = fxLevel();
+    sdpr = f === 'high' ? dpr : f === 'low' ? Math.min(dpr, 1) : Math.min(dpr * 0.5, 1.5);
+    sceneCanvas.width = Math.round(vw * sdpr); sceneCanvas.height = Math.round(vh * sdpr);
+  }
   function layout() {
     const pw = vw, ph = vh;
     vw = window.innerWidth; vh = window.innerHeight;
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
-    sdpr = settings.fx === 'high' ? dpr : settings.fx === 'low' ? Math.min(dpr, 1) : Math.min(dpr * 0.5, 1.5);
-    sceneCanvas.width = Math.round(vw * sdpr); sceneCanvas.height = Math.round(vh * sdpr);
+    setSceneRes();
     portrait = vh > vw * 1.05;
     const buttons = settings.controls === 'buttons';
     // 螢幕按鍵尺寸（左手區：硬降 / 間隔 / ◀▶ / ▼）
@@ -476,7 +485,7 @@
 
   // ================= 特效 =================
   const fx = { missiles: [], particles: [], flashes: [], rings: [], streaks: [], popups: [], lockFlash: [], shards: [], waves: [], shake: 0, pulse: 0, aberr: 0, flash: 0, impact: 0, impactV: 0, rowOff: null, rowT: 1 };
-  const maxParticles = () => (settings.fx === 'low' ? 140 : 480);
+  const maxParticles = () => (fxLevel() === 'low' ? 140 : 480);
   function addParticle(p) { if (fx.particles.length < maxParticles()) fx.particles.push(p); }
   function burst(x, y, color, n, speed, life, gravity) {
     for (let i = 0; i < n; i++) {
@@ -496,7 +505,7 @@
     for (let i = fx.missiles.length - 1; i >= 0; i--) {
       const m = fx.missiles[i];
       m.t += s;
-      if (m.t >= m.life) { burst(m.x1, m.y1, m.color, settings.fx === 'low' ? 5 : 14, cell * 5, 0.45, 0); fx.missiles.splice(i, 1); }
+      if (m.t >= m.life) { burst(m.x1, m.y1, m.color, fxLevel() === 'low' ? 5 : 14, cell * 5, 0.45, 0); fx.missiles.splice(i, 1); }
     }
     for (const arr of [fx.flashes, fx.rings, fx.streaks, fx.popups, fx.lockFlash]) {
       for (let i = arr.length - 1; i >= 0; i--) { arr[i].t += s; if (arr[i].t >= arr[i].life) arr.splice(i, 1); }
@@ -551,7 +560,7 @@
         for (const [x, y] of fin) {
           if (occupied.has(`${x},${y + 1}`)) continue;
           const [px, py] = cellPos(x, y + 1);
-          burst(px + cell / 2, py, COLORS[d.type], settings.fx === 'low' ? 3 : 7, cell * 6, 0.45, cell * 14);
+          burst(px + cell / 2, py, COLORS[d.type], fxLevel() === 'low' ? 3 : 7, cell * 6, 0.45, cell * 14);
         }
         fx.shake = Math.max(fx.shake, Math.min(1 + d.dist * 0.2, 5));
         fx.impactV += Math.min(30 + d.dist * 8, 200);
@@ -578,7 +587,7 @@
         }
         Snd.setBoost(d.combo >= 2 ? d.combo : 0);
         levelStart.maxCombo = Math.max(levelStart.maxCombo, d.combo);
-        const low = settings.fx === 'low';
+        const low = fxLevel() === 'low';
         const cxB = bx + cell * 5;
         for (const row of d.rows) {
           fx.flashes.push({ y: row.y, t: 0, life: 0.42 });
@@ -1313,7 +1322,7 @@
     fx.popups.length = 0;
     input.releaseAll();
     // 場地四周噴出彩光
-    for (let i = 0; i < (settings.fx === 'low' ? 30 : 90); i++) {
+    for (let i = 0; i < (fxLevel() === 'low' ? 30 : 90); i++) {
       const side = i % 4;
       const x = side < 2 ? bx + Math.random() * cell * 10 : side === 2 ? bx : bx + cell * 10;
       const y = side === 0 ? by : side === 1 ? by + cell * VIS : by + Math.random() * cell * VIS;
@@ -1330,7 +1339,7 @@
     // 超空間光束：越接近抵達越密、越快
     if (t >= TR_WARP && t < TR_ARRIVE + 0.2) {
       const k = Math.min(1, (t - TR_WARP) / (TR_ARRIVE - TR_WARP));
-      const n = Math.floor((settings.fx === 'low' ? 60 : 160) * k * s * 10);
+      const n = Math.floor((fxLevel() === 'low' ? 60 : 160) * k * s * 10);
       for (let i = 0; i < n; i++) tr.streaks.push({ a: Math.random() * Math.PI * 2, r: Math.random() * 0.15, v: 0.6 + Math.random() * 1.2, w: 0.5 + Math.random() * 1.8, hue: Math.random() });
       fx.aberr = Math.max(fx.aberr, 0.6 + k * 1.6);
     }
@@ -1594,7 +1603,7 @@
       }
     }
     // 方塊隨低音呼吸：再疊一層加亮（省電以上才有）
-    if (settings.fx !== 'low' && beat > 0.06) {
+    if (fxLevel() !== 'low' && beat > 0.06) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = beat * 0.22;
@@ -1901,7 +1910,7 @@
     }
     updateVs(dt);
     const bi = Snd.beatInfo();
-    if (settings.fx !== 'low' && Snd.analyser && bi.playing) {
+    if (fxLevel() !== 'low' && Snd.analyser && bi.playing) {
       // 用 FFT 讀低音能量驅動畫面（每秒最多約 60 次），衰減讓光暈有餘韻
       if (ts - fftLast >= 15) { fftLast = ts; fftBass = Snd.bassLevel(); }
       beatSmooth = Math.max(fftBass, beatSmooth * Math.pow(0.004, dt / 1000));
@@ -2057,7 +2066,7 @@
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
     if (game && mode !== 'menu') touchEl.classList.toggle('hidden', settings.controls === 'off' || mode === 'over');
     layout();
-    if (fxChanged) { rebuildScenes(); setupPost(); }
+    if (fxChanged) { rebuildScenes(); setupPost(); setSceneRes(); }
   }
 
   // ================= 事件綁定 =================
