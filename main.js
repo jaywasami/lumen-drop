@@ -8,14 +8,14 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.07-7';
+  const VERSION = '2026.10.08-1';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   const DEFAULTS = {
     das: 130, arr: 20, sdf: 20,
     controls: coarse ? 'buttons' : 'off',
-    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: 'high', startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true, name: '', vsRounds: 3,
+    haptics: true, sfx: 0.7, music: 0.6, ghost: true, fx: coarse ? 'balanced' : 'high', showFps: false, startLevel: 1, hdMode: 'release', show180: false, hdGap: 36, btnScale: 1, customPad: null, difficulty: 'relaxed', transitions: true, name: '', vsRounds: 3,
     keys: JSON.parse(JSON.stringify(DEFAULT_KEYS)),
   };
   let settings = loadSettings();
@@ -25,11 +25,13 @@
       const merged = Object.assign({}, JSON.parse(JSON.stringify(DEFAULTS)), s);
       merged.keys = Object.assign({}, DEFAULTS.keys, s.keys || {});
       merged.startLevel = 1; // 起始等級只在本次開啟有效，避免下次還停在高等級
+      // 舊版手機預設是「高」：第一次升級到有省電模式的版本時，自動改成省電
+      if (!s.fxv) { if (coarse && merged.fx === 'high') merged.fx = 'balanced'; merged.fxv = 1; }
       return merged;
     } catch (_) { return JSON.parse(JSON.stringify(DEFAULTS)); }
   }
   function saveSettings() {
-    try { localStorage.setItem('lumen.settings.v1', JSON.stringify(Object.assign({}, settings, { startLevel: 1 }))); } catch (_) { /* ignore */ }
+    try { localStorage.setItem('lumen.settings.v1', JSON.stringify(Object.assign({}, settings, { startLevel: 1, fxv: 1 }))); } catch (_) { /* ignore */ }
   }
   function getBest() { try { return +localStorage.getItem('lumen.best') || 0; } catch (_) { return 0; } }
   function setBest(v) { try { localStorage.setItem('lumen.best', String(v)); } catch (_) { /* ignore */ } }
@@ -37,14 +39,21 @@
   // ================= DOM =================
   const $ = (id) => document.getElementById(id);
   const canvas = $('c');
-  const ctx = canvas.getContext('2d');
+  let ctx = canvas.getContext('2d');
+  // 場景背景另外畫在一張解析度較低的畫布，再放大貼到主畫布（省電模式）
+  const sceneCanvas = document.createElement('canvas');
+  const sceneCtx = sceneCanvas.getContext('2d', { alpha: false });
+  let sdpr = 1;
+  const powerSave = () => settings.fx !== 'high';
   const touchEl = $('touch');
   const glCanvas = $('gl');
   let post = null;
   function setupPost() {
     if (settings.fx === 'low') post = null;
     else if (!post) post = window.LumenPost && window.LumenPost.create(glCanvas);
-    document.body.classList.toggle('post-on', !!post);
+    if (post) post.setLight(settings.fx === 'balanced');
+    document.body.classList.toggle('post-on', !!post && !post.lightMode);
+    document.body.classList.toggle('post-light', !!post && post.lightMode);
   }
   const pauseBtn = $('btn-pause');
   const overlays = ['menu', 'pause', 'gameover', 'help', 'settings', 'versus', 'room', 'vsresult', 'vsquit'].reduce((o, k) => (o[k] = $(k), o), {});
@@ -287,6 +296,8 @@
     vw = window.innerWidth; vh = window.innerHeight;
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
+    sdpr = settings.fx === 'high' ? dpr : settings.fx === 'low' ? Math.min(dpr, 1) : Math.min(dpr * 0.5, 1.5);
+    sceneCanvas.width = Math.round(vw * sdpr); sceneCanvas.height = Math.round(vh * sdpr);
     portrait = vh > vw * 1.05;
     const buttons = settings.controls === 'buttons';
     // 螢幕按鍵尺寸（左手區：硬降 / 間隔 / ◀▶ / ▼）
@@ -1695,8 +1706,21 @@
   }
 
   function render(t) {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawBackground(t);
+    if (sdpr < dpr) {
+      // 場景畫在低解析度畫布上再放大（場景本來就是柔和的漸層，肉眼幾乎看不出差別）
+      const main = ctx;
+      ctx = sceneCtx;
+      ctx.setTransform(sdpr, 0, 0, sdpr, 0, 0);
+      drawBackground(t);
+      ctx = main;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(sceneCanvas, 0, 0, canvas.width, canvas.height);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    } else {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawBackground(t);
+    }
+    if (settings.showFps) drawFps();
     if (!game) return;
     ctx.save();
     if (fx.shake > 0.3) ctx.translate((Math.random() - 0.5) * fx.shake, (Math.random() - 0.5) * fx.shake);
@@ -1724,6 +1748,17 @@
 
   // ================= 主迴圈 =================
   let last = performance.now();
+  // 幀率計：每秒更新一次，顯示畫面幀數與每幀運算時間
+  const fpsStat = { n: 0, acc: 0, work: 0, fps: 0, ms: 0 };
+  function drawFps() {
+    ctx.save();
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(4, 4, 112, 18);
+    ctx.fillStyle = fpsStat.fps >= 55 ? '#8f8' : fpsStat.fps >= 40 ? '#ff8' : '#f88';
+    ctx.fillText(`${fpsStat.fps} fps · ${fpsStat.ms.toFixed(1)} ms`, 8, 7);
+    ctx.restore();
+  }
   let perfAcc = 0, perfN = 0;
   // 淺色場景（水墨）光暈要壓低，避免白紙過曝
   function bloomScale() {
@@ -1734,7 +1769,12 @@
   }
   function frame(ts) {
     requestAnimationFrame(frame);
+    // 省電模式：上限 60fps（120Hz 螢幕就每兩次刷新畫一次）
+    if (powerSave() && ts - last < 1000 / 60 - 3) return;
+    const t0 = performance.now();
     const dt = Math.min(50, ts - last); last = ts;
+    fpsStat.n++; fpsStat.acc += dt;
+    if (fpsStat.acc >= 1000) { fpsStat.fps = Math.round(fpsStat.n * 1000 / fpsStat.acc); fpsStat.ms = fpsStat.work / fpsStat.n; fpsStat.n = 0; fpsStat.acc = 0; fpsStat.work = 0; }
     input.poll();
     if (mode === 'countdown') {
       countdown -= dt / 1000;
@@ -1760,7 +1800,12 @@
     if (post && mode === 'playing' && !window.__noPerfGuard) {
       perfAcc += dt; perfN++;
       if (perfAcc >= 3000) {
-        if (perfAcc / perfN > 25) { post = null; document.body.classList.remove('post-on'); popup(['已切換省電顯示'], '#8be9ff'); }
+        if (perfAcc / perfN > 25) {
+          // 太慢：完整光暈 → 省電光暈 → 關閉光暈
+          if (!post.lightMode) { post.setLight(true); document.body.classList.remove('post-on'); document.body.classList.add('post-light'); }
+          else { post = null; document.body.classList.remove('post-light'); }
+          popup(['已切換省電顯示'], '#8be9ff');
+        }
         perfAcc = 0; perfN = 0;
       }
     }
@@ -1777,8 +1822,9 @@
           return { x: w.x, y: w.y, r: k * 1.1, s: w.s * (1 - k) };
         }),
       });
-      if (!ok) { post = null; document.body.classList.remove('post-on'); }
+      if (!ok) { post = null; document.body.classList.remove('post-on'); document.body.classList.remove('post-light'); }
     }
+    fpsStat.work += performance.now() - t0;
   }
 
   // ================= 設定介面 =================
@@ -1843,7 +1889,8 @@
     mkSeg('顯示 180° 按鈕', 'show180', [[false, '隱藏'], [true, '顯示']]);
     mkSeg('震動回饋', 'haptics', [[true, '開'], [false, '關']]);
     mkSeg('落點提示', 'ghost', [[true, '開'], [false, '關']]);
-    mkSeg('特效品質', 'fx', [['high', '高（光暈）'], ['low', '省電']]);
+    mkSeg('畫面品質', 'fx', [['high', '高（最耗電）'], ['balanced', '省電（建議）'], ['low', '最省電']]);
+    mkSeg('顯示幀率', 'showFps', [[false, '關'], [true, '開']]);
 
     const h = document.createElement('h3'); h.textContent = '鍵盤按鍵（點擊後按新按鍵）'; h.style.textAlign = 'left';
     body.append(h);
@@ -1991,7 +2038,7 @@
 
   // 供自動測試使用
   window.__lumen = {
-    get game() { return game; }, get mode() { return mode; }, startGame, settings: () => settings, get vs() { return vs; }, startCpu,
+    get game() { return game; }, get mode() { return mode; }, get fpsStat() { return fpsStat; }, applySettings, startGame, settings: () => settings, get vs() { return vs; }, startCpu,
     setTheme: (i) => { setTheme(i, true); }, themes: THEMES, get themeIdx() { return themeIdx; }, get post() { return post; },
   };
 })();

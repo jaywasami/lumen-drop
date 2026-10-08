@@ -97,6 +97,20 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+  // 省電版合成：只輸出光暈（與閃光），以 CSS screen 混色疊在原本的 2D 畫布上
+  const LIGHT_COMP = `
+precision mediump float;
+varying vec2 vUv;
+uniform sampler2D uBloom1;
+uniform sampler2D uBloom2;
+uniform float uBloom;
+uniform float uFlash;
+void main() {
+  vec3 b = texture2D(uBloom1, vUv).rgb * 0.75 + texture2D(uBloom2, vUv).rgb * 0.7;
+  vec3 col = mix(b * uBloom, vec3(1.0), uFlash);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
   class Post {
     constructor(canvas) {
       const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
@@ -113,7 +127,11 @@ void main() {
         blur: this.program(BLUR, ['uTex', 'uDir']),
         copy: this.program(COPY, ['uTex', 'uTexel']),
         comp: this.program(COMPOSITE, ['uScene', 'uBloom1', 'uBloom2', 'uBloom', 'uAberr', 'uVig', 'uFlash', 'uGrain', 'uTime', 'uAspect', 'uW0', 'uW1', 'uW2']),
+        light: this.program(LIGHT_COMP, ['uBloom1', 'uBloom2', 'uBloom', 'uFlash']),
       };
+      this.lightMode = false;
+      this.small = document.createElement('canvas');
+      this.smallCtx = this.small.getContext('2d', { alpha: false });
       this.src = this.texture();
       this.w = 0; this.h = 0;
     }
@@ -192,9 +210,48 @@ void main() {
       this.pass(P, a, (u) => { this.bind(0, b.tex); gl.uniform1i(u.uTex, 0); gl.uniform2f(u.uDir, 0, radius / b.h); });
     }
 
+    setLight(on) { if (this.lightMode !== !!on) { this.lightMode = !!on; this.w = 0; this.h = 0; } }
+
+    // 省電版：把畫面先縮成 1/4 再上傳，只在小圖上算光暈，輸出也只有 1/4 大小（CSS 放大）
+    renderLight(srcCanvas, p) {
+      const gl = this.gl;
+      const sw = Math.max(1, Math.round(srcCanvas.width / 4)), sh = Math.max(1, Math.round(srcCanvas.height / 4));
+      if (this.small.width !== sw || this.small.height !== sh) { this.small.width = sw; this.small.height = sh; }
+      this.smallCtx.drawImage(srcCanvas, 0, 0, sw, sh);
+      if (sw !== this.w || sh !== this.h) {
+        this.w = sw; this.h = sh;
+        this.canvas.width = sw; this.canvas.height = sh;
+        this.q1 = this.target(sw, sh); this.q2 = this.target(sw, sh);
+        const e = [Math.max(1, Math.round(sw / 2)), Math.max(1, Math.round(sh / 2))];
+        this.e1 = this.target(...e); this.e2 = this.target(...e);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, this.src);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.small);
+      this.pass(this.progs.bright, this.q1, (u) => {
+        this.bind(0, this.src); gl.uniform1i(u.uTex, 0);
+        gl.uniform2f(u.uTexel, 0.5 / sw, 0.5 / sh);
+        gl.uniform1f(u.uThr, p.thr);
+      });
+      this.blur(this.q1, this.q2, 1.5);
+      this.pass(this.progs.copy, this.e1, (u) => {
+        this.bind(0, this.q1.tex); gl.uniform1i(u.uTex, 0);
+        gl.uniform2f(u.uTexel, 1 / this.q1.w, 1 / this.q1.h);
+      });
+      this.blur(this.e1, this.e2, 2.5);
+      this.pass(this.progs.light, null, (u) => {
+        this.bind(1, this.q1.tex); gl.uniform1i(u.uBloom1, 1);
+        this.bind(2, this.e1.tex); gl.uniform1i(u.uBloom2, 2);
+        gl.uniform1f(u.uBloom, p.bloom);
+        gl.uniform1f(u.uFlash, p.flash || 0);
+      });
+      return true;
+    }
+
     // p: { bloom, thr, aberr, vig, flash, waves: [{x, y, r, s}] }（x、y 為 0~1，y 由上往下）
     render(srcCanvas, p) {
       if (this.lost) return false;
+      if (this.lightMode) return this.renderLight(srcCanvas, p);
       const gl = this.gl;
       this.resize(srcCanvas.width, srcCanvas.height);
       gl.bindTexture(gl.TEXTURE_2D, this.src);
