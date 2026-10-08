@@ -1202,15 +1202,18 @@
           this.noise({ t: now, freq: 3000, d: 0.025, peak: 0.04, out });
           break;
         case 'hardDrop':
+          this.noise({ t: now, freq: 4500, a: 0.001, d: 0.012, peak: 0.14, out }); // 清脆的起音，讓撞擊感即時
           this.synth({ t: now, f: 58, pitchFrom: 2.6, glide: 0.08, waves: [['sine', 0, 1], ['sine', 0, 0.3, 2]], d: 0.26, peak: 0.4, out });
           this.synth({ t: now, f: mtof(tone(0, -1)), waves: [['triangle', 0, 1]], d: 0.16, peak: 0.1, out });
           this.noise({ t: now, freq: 1500, d: 0.07, peak: 0.07, out });
           break;
         case 'clear': {
           const n = d.lines || 0;
-          const t0 = this.nextGrid(1);
+          // 撞擊聲一律立刻發出（不等節拍格，慢歌的一格可達 0.37 秒，會感覺慢半拍）；
+          // 上行音階也從當下開始，用固定的快速間隔
+          const t0 = now;
           const cur = this.current();
-          const step = cur ? cur.stepDur : 0.12;
+          const step = Math.min(cur ? cur.stepDur : 0.12, 0.1);
           const start = Math.min(4, Math.max(0, d.combo || 0));
           const count = n >= 4 ? 8 : n + 3;
           for (let i = 0; i < count; i++) {
