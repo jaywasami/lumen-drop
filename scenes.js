@@ -2854,8 +2854,205 @@
     burst(d) { this.flash = Math.min(1.5, this.flash + 0.3 * d.lines); if (d.lines >= 3) this.bolt(); }
   }
 
+  // ============ 東方神龍（程式繪製，有立體光影；飛龍場景使用）============
+  const ED_RED = { hi: '#ff6a55', mid: '#d92a32', lo: '#8a1020', edge: '#5a0a14', belly: '#ffe6c0', belly2: '#f0b878', horn0: '#fff4e4', horn1: '#ffc4b4', horn2: '#e8808a', mane0: '#8a1020', mane1: '#ff6a40', mane2: '#ffd060', spike0: '#fff0d0', spike1: '#f0a070', whisk: '#ffe6a8', eye0: '#fff6b0', eye1: '#f6b020' };
+  const ED_GOLD = { hi: '#fff0a0', mid: '#f0b030', lo: '#a86010', edge: '#5a3008', belly: '#fff6d8', belly2: '#f4d890', horn0: '#fff8e8', horn1: '#ffd8a0', horn2: '#e89050', mane0: '#a04010', mane1: '#ff9030', mane2: '#fff0a0', spike0: '#fff8e0', spike1: '#e8a040', whisk: '#fff0c0', eye0: '#e0f8ff', eye1: '#30a0d0' };
+
+  function edBez(p0, p1, p2, p3, t) { const u = 1 - t; return [u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]]; }
+  // 沿點列畫一條由粗到細的實心管（填多邊形）
+  function edTaper(g, pts, w0, w1, fill, stroke) {
+    const n = pts.length, L = [], R = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let dx = b[0] - a[0], dy = b[1] - a[1]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+      const w = (w0 + (w1 - w0) * (i / (n - 1))) / 2;
+      L.push([pts[i][0] - dy * w, pts[i][1] + dx * w]); R.push([pts[i][0] + dy * w, pts[i][1] - dx * w]);
+    }
+    g.beginPath(); L.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); for (let i = n - 1; i >= 0; i--) g.lineTo(R[i][0], R[i][1]); g.closePath();
+    g.fillStyle = fill; g.fill(); if (stroke) { g.strokeStyle = stroke; g.lineWidth = 1; g.stroke(); }
+  }
+  const edCurve = (p0, p1, p2, p3, n) => { const o = []; for (let i = 0; i <= (n || 14); i++) o.push(edBez(p0, p1, p2, p3, i / (n || 14))); return o; };
+
+  // —— 龍頭（朝右，局部座標；長度約 150）——
+  function edHead(g, S, t, P, open) {
+    open = open == null ? 0.3 : open;
+    g.save(); g.scale(S, S); g.lineJoin = 'round'; g.lineCap = 'round';
+    const wob = (k, a) => Math.sin(t * 2.2 + k) * a;
+    // 1. 鬃毛：火焰狀，往後飄
+    for (let k = 0; k < 8; k++) {
+      const a0 = Math.PI + (k - 3.5) * 0.2, len = 78 + (k % 3) * 22, bx = -26 + k * 2, by = -34 + k * 7;
+      const tx = bx + Math.cos(a0) * len + wob(k, 6), ty = by + Math.sin(a0) * len * 0.7 + wob(k + 2, 8) - 10;
+      const pts = edCurve([bx, by], [bx - 22, by - 14 + wob(k, 5)], [tx + 26, ty + 10], [tx, ty], 12);
+      const gr = g.createLinearGradient(bx, by, tx, ty); gr.addColorStop(0, P.mane0); gr.addColorStop(0.55, P.mane1); gr.addColorStop(1, P.mane2);
+      edTaper(g, pts, 17, 1.5, gr);
+    }
+    // 2. 角：像鹿角，主幹 + 兩個分叉，奶白漸層到粉紅
+    const horn = (sx, sy, flip) => {
+      const f = flip || 1;
+      const main = edCurve([sx, sy], [sx - 36, sy - 38 * f], [sx - 82, sy - 30 * f], [sx - 118, sy - 62 * f], 18);
+      const gr = g.createLinearGradient(sx, sy, sx - 118, sy - 62 * f); gr.addColorStop(0, P.horn0); gr.addColorStop(0.6, P.horn1); gr.addColorStop(1, P.horn2);
+      edTaper(g, main, 15, 2.5, gr, 'rgba(120,40,40,0.5)');
+      for (const [ti, dx, dy, w] of [[0.5, -12, -34, 8], [0.78, -6, -28, 6]]) {
+        const [bx, by] = main[Math.round(ti * 18)];
+        const br = edCurve([bx, by], [bx - 6, by - 14 * f], [bx + dx * 0.5, by + dy * f * 0.7], [bx + dx, by + dy * f], 10);
+        edTaper(g, br, w, 1.5, gr, 'rgba(120,40,40,0.5)');
+      }
+      // 角上的節紋
+      g.strokeStyle = 'rgba(150,60,60,0.35)'; g.lineWidth = 1.2;
+      for (let i = 3; i < 15; i += 3) { const [px, py] = main[i], [qx, qy] = main[i + 1]; const nx = -(qy - py), ny = qx - px, l = Math.hypot(nx, ny) || 1; g.beginPath(); g.moveTo(px - nx / l * 6, py - ny / l * 6); g.lineTo(px + nx / l * 6, py + ny / l * 6); g.stroke(); }
+    };
+    horn(-12, -36, 1);
+    // 3. 臉頰鰭
+    for (const [tx, ty, w] of [[-52, 2, 14], [-60, 24, 14], [-48, 46, 12]]) {
+      const pts = edCurve([-4, 12 + (ty - 2) * 0.3], [-20, 10 + ty * 0.4], [tx + 18, ty - 6], [tx, ty], 10);
+      const gr = g.createLinearGradient(-4, 12, tx, ty); gr.addColorStop(0, P.lo); gr.addColorStop(0.5, P.mane1); gr.addColorStop(1, P.mane2);
+      edTaper(g, pts, w, 1.5, gr);
+    }
+    // 4. 下顎（張開）
+    g.save(); g.translate(4, 10); g.rotate(open); g.translate(-4, -10);
+    const jaw = new Path2D(); jaw.moveTo(4, 10); jaw.lineTo(88, 10); jaw.bezierCurveTo(96, 10, 102, 12, 100, 16); jaw.bezierCurveTo(100, 22, 94, 26, 84, 27); jaw.bezierCurveTo(66, 32, 40, 38, 20, 36); jaw.bezierCurveTo(6, 34, -6, 30, -8, 22); jaw.closePath();
+    const jg = g.createLinearGradient(0, 8, 0, 38); jg.addColorStop(0, P.mid); jg.addColorStop(0.6, P.lo); jg.addColorStop(1, P.lo);
+    g.fillStyle = jg; g.fill(jaw); g.strokeStyle = P.edge; g.lineWidth = 1.5; g.stroke(jaw);
+    g.strokeStyle = P.belly; g.lineWidth = 5; g.beginPath(); g.moveTo(24, 33); g.bezierCurveTo(44, 34, 66, 30, 84, 24); g.stroke();
+    g.strokeStyle = 'rgba(160,100,40,0.5)'; g.lineWidth = 1; for (let x = 30; x < 84; x += 8) { g.beginPath(); g.moveTo(x, 30 - (x - 30) * 0.1); g.lineTo(x, 36 - (x - 30) * 0.1); g.stroke(); }
+    // 舌頭
+    g.fillStyle = '#ff7a8a'; g.beginPath(); g.moveTo(12, 10); g.quadraticCurveTo(40, 2 + wob(1, 2), 66, 8); g.quadraticCurveTo(40, 14, 12, 14); g.fill();
+    // 下排獠牙
+    g.fillStyle = P.belly; for (const x of [58, 78]) { g.beginPath(); g.moveTo(x - 4, 10); g.lineTo(x + 1, -6); g.lineTo(x + 5, 10); g.closePath(); g.fill(); g.strokeStyle = 'rgba(120,60,40,0.5)'; g.lineWidth = 0.8; g.stroke(); }
+    g.restore();
+    // 嘴內暗部
+    g.fillStyle = '#4a0610'; g.beginPath(); g.moveTo(2, 8); g.lineTo(90, -6); g.lineTo(98, 14 + open * 30); g.lineTo(6, 14 + open * 8); g.closePath(); g.fill();
+    // 5. 上顎／頭顱
+    const head = new Path2D();
+    head.moveTo(-42, 8); head.bezierCurveTo(-46, -10, -44, -26, -34, -30); head.bezierCurveTo(-26, -40, -12, -44, 0, -42);
+    head.bezierCurveTo(12, -40, 24, -42, 34, -36); head.bezierCurveTo(46, -30, 58, -26, 70, -26);
+    head.bezierCurveTo(84, -26, 94, -26, 100, -34); head.bezierCurveTo(108, -34, 108, -24, 104, -18);
+    head.bezierCurveTo(102, -12, 96, -8, 88, -6); head.bezierCurveTo(70, 0, 40, 6, 12, 10); head.bezierCurveTo(-8, 14, -30, 14, -42, 8); head.closePath();
+    const hg = g.createLinearGradient(0, -44, 0, 14); hg.addColorStop(0, P.hi); hg.addColorStop(0.35, P.mid); hg.addColorStop(1, P.lo);
+    g.fillStyle = hg; g.fill(head);
+    g.save(); g.clip(head);
+    // 立體感：上方亮面、下方暗面、吻部高光
+    const sh = g.createRadialGradient(34, -30, 2, 34, -28, 60); sh.addColorStop(0, 'rgba(255,230,210,0.5)'); sh.addColorStop(1, 'rgba(255,230,210,0)'); g.fillStyle = sh; g.fillRect(-60, -60, 180, 90);
+    const sh2 = g.createRadialGradient(82, -24, 1, 82, -22, 18); sh2.addColorStop(0, 'rgba(255,240,230,0.6)'); sh2.addColorStop(1, 'rgba(255,240,230,0)'); g.fillStyle = sh2; g.fillRect(60, -50, 60, 50);
+    const sd = g.createLinearGradient(0, -4, 0, 14); sd.addColorStop(0, 'rgba(60,0,10,0)'); sd.addColorStop(1, 'rgba(60,0,10,0.45)'); g.fillStyle = sd; g.fillRect(-50, -4, 160, 24);
+    // 鱗片
+    g.strokeStyle = 'rgba(100,0,14,0.38)'; g.lineWidth = 1;
+    for (let row = 0; row < 7; row++) for (let col = 0; col < 14; col++) {
+      const x = -40 + col * 9 + (row % 2) * 4.5, y = -36 + row * 7;
+      if (x > 56 + row * 2) continue;
+      g.beginPath(); g.arc(x, y, 4.2, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
+    }
+    g.restore();
+    g.strokeStyle = P.edge; g.lineWidth = 1.6; g.stroke(head);
+    // 6. 頭頂小尖刺（沿著中線）
+    for (let i = 0; i < 5; i++) { const x = -32 + i * 9, y = -34 - (i < 2 ? i * 1.5 : (4 - i) * 1.5) - 3; g.fillStyle = P.spike0; g.beginPath(); g.moveTo(x - 4, y + 5); g.lineTo(x - 1, y - 11 + i); g.lineTo(x + 4, y + 5); g.closePath(); g.fill(); g.strokeStyle = 'rgba(120,40,30,0.5)'; g.lineWidth = 0.8; g.stroke(); }
+    // 7. 上排獠牙
+    g.fillStyle = P.belly; g.strokeStyle = 'rgba(120,60,40,0.55)'; g.lineWidth = 0.9;
+    for (const [x, y, h2, w2] of [[86, -6, 22, 7], [60, -1, 12, 5], [38, 3, 9, 4.5], [18, 7, 8, 4]]) { g.beginPath(); g.moveTo(x - w2 / 2, y); g.quadraticCurveTo(x + 1, y + h2 * 0.4, x + 1.5, y + h2); g.quadraticCurveTo(x + w2 * 0.6, y + h2 * 0.3, x + w2 / 2, y); g.closePath(); g.fill(); g.stroke(); }
+    // 8. 鼻孔與鼻頭
+    g.fillStyle = '#4a0610'; g.beginPath(); g.ellipse(93, -22, 5.2, 3.4, -0.5, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(255,200,170,0.7)'; g.lineWidth = 1.5; g.beginPath(); g.arc(94, -24, 7.5, 3.5, 5.2); g.stroke();
+    // 9. 眉骨與眼睛
+    g.fillStyle = P.lo; g.beginPath(); g.moveTo(2, -26); g.quadraticCurveTo(18, -40, 42, -28); g.quadraticCurveTo(24, -26, 2, -26); g.fill();
+    g.strokeStyle = P.edge; g.lineWidth = 1.2; g.stroke();
+    const eg = g.createRadialGradient(22, -17, 1, 22, -16, 11); eg.addColorStop(0, P.eye0); eg.addColorStop(1, P.eye1);
+    g.fillStyle = '#fff2e0'; g.beginPath(); g.ellipse(22, -16, 12.5, 8.6, -0.2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = eg; g.beginPath(); g.ellipse(23, -16, 8.8, 8, -0.2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#1a0408'; g.beginPath(); g.ellipse(24, -16, 2.6, 7, -0.2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(19.5, -19.5, 2.6, 0, Math.PI * 2); g.fill(); g.beginPath(); g.arc(27, -12.5, 1.3, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = P.edge; g.lineWidth = 1.8; g.beginPath(); g.ellipse(22, -16, 12.5, 8.6, -0.2, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
+    // 10. 長鬚（兩條），隨時間飄動
+    for (const [k, pp, wv] of [[0, [[92, -12], [118, -70], [40, -112], [-34, -84]], 1], [1, [[84, 34], [112, 76], [60, 108], [-10, 84]], -1]]) {
+      const pts = edCurve(pp[0], pp[1], pp[2], pp[3], 20).map((p, i, A) => { const u = i / 20; return [p[0], p[1] + Math.sin(u * 9 + t * 3 + k) * 5 * u * wv]; });
+      edTaper(g, pts, 4.2, 0.8, P.whisk, 'rgba(160,100,40,0.4)');
+      const e = pts[pts.length - 1]; g.fillStyle = P.mane2; g.beginPath(); g.arc(e[0], e[1], 3.2, 0, Math.PI * 2); g.fill();
+    }
+    // 11. 下巴鬍鬚
+    for (let k = 0; k < 4; k++) { const bx = 50 - k * 8, by = 36; const pts = edCurve([bx, by], [bx - 6, by + 14], [bx - 22 + wob(k, 3), by + 20], [bx - 36 + wob(k + 1, 5), by + 18 + k * 4], 10); edTaper(g, pts, 5, 0.8, P.whisk, 'rgba(160,100,40,0.35)'); }
+    g.restore();
+  }
+
+  // —— 龍身：沿著脊線，管狀 + 光影 + 鱗片 + 背刺 + 腹甲 ——
+  function edBody(g, spine, widthAt, P, opts) {
+    opts = opts || {};
+    const n = spine.length;
+    const off = (i, k) => { const a = spine[Math.max(0, i - 1)], b = spine[Math.min(n - 1, i + 1)]; let dx = b[0] - a[0], dy = b[1] - a[1]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; return [-dy * k, dx * k, dx, dy]; };
+    // 背刺（背在行進方向左側），畫在身體後面
+    for (let i = 2; i < n - 3; i += 2) {
+      const w = widthAt(i), [ox, oy, dx, dy] = off(i, 1); const h = w * 0.62 * (1 - i / n * 0.5);
+      const bx = spine[i][0] + ox * w * 0.46, by = spine[i][1] + oy * w * 0.46;
+      const gr = g.createLinearGradient(bx, by, bx + ox * h, by + oy * h); gr.addColorStop(0, P.spike1); gr.addColorStop(1, P.spike0);
+      g.fillStyle = gr; g.strokeStyle = 'rgba(100,30,20,0.55)'; g.lineWidth = 0.9;
+      g.beginPath(); g.moveTo(bx + dx * w * 0.3, by + dy * w * 0.3); g.lineTo(bx + ox * h - dx * w * 0.25, by + oy * h - dy * w * 0.25); g.lineTo(bx - dx * w * 0.3, by - dy * w * 0.3); g.closePath(); g.fill(); g.stroke();
+    }
+    const stroke = (shiftX, shiftY, wk, col, dash) => {
+      g.beginPath(); for (let i = 0; i < n; i++) { const x = spine[i][0] + shiftX * widthAt(i), y = spine[i][1] + shiftY * widthAt(i); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.strokeStyle = col; g.lineCap = 'round'; g.lineJoin = 'round';
+      // 逐段畫，線寬隨位置改變
+      for (let i = 1; i < n; i++) { g.beginPath(); g.moveTo(spine[i - 1][0] + shiftX * widthAt(i - 1), spine[i - 1][1] + shiftY * widthAt(i - 1)); g.lineTo(spine[i][0] + shiftX * widthAt(i), spine[i][1] + shiftY * widthAt(i)); g.lineWidth = widthAt(i) * wk; g.stroke(); }
+    };
+    stroke(0, 0, 1.12, P.edge);
+    stroke(0, 0, 1.0, P.mid);
+    // 下半部暗面（光從左上來：暗面在右下）
+    stroke(0.14, 0.2, 0.7, P.lo);
+    stroke(0, 0, 0.62, P.mid);
+    stroke(-0.1, -0.16, 0.42, P.hi);
+    stroke(-0.14, -0.22, 0.14, 'rgba(255,225,205,0.7)');
+    // 腹甲：身體右下側的奶油色橫紋
+    g.save();
+    for (let i = 1; i < n - 1; i++) {
+      const w = widthAt(i), [ox, oy] = off(i, 1);
+      const bx = spine[i][0] - ox * w * 0.36, by = spine[i][1] - oy * w * 0.36;
+      const gr = g.createLinearGradient(bx, by, bx - ox * w * 0.2, by - oy * w * 0.2); gr.addColorStop(0, P.belly); gr.addColorStop(1, P.belly2);
+      g.strokeStyle = gr; g.lineWidth = Math.max(1, w * 0.1);
+      g.beginPath(); g.moveTo(bx + ox * w * 0.1, by + oy * w * 0.1); g.lineTo(bx - ox * w * 0.14, by - oy * w * 0.14); g.stroke();
+    }
+    g.restore();
+    // 鱗片：交錯的小弧線，帶高光
+    for (let i = 2; i < n - 1; i++) {
+      const w = widthAt(i), [ox, oy, dx, dy] = off(i, 1);
+      for (const k of [-0.28, 0, 0.28]) {
+        const cx = spine[i][0] + ox * w * k * (i % 2 ? 1 : 0.6) + dx * (i % 2) * w * 0.12, cy = spine[i][1] + oy * w * k * (i % 2 ? 1 : 0.6) + dy * (i % 2) * w * 0.12;
+        const ang = Math.atan2(dy, dx); const r = w * 0.17;
+        g.strokeStyle = 'rgba(90,0,14,0.4)'; g.lineWidth = Math.max(0.8, w * 0.025); g.beginPath(); g.arc(cx, cy, r, ang - Math.PI * 0.48, ang + Math.PI * 0.48); g.stroke();
+        g.strokeStyle = 'rgba(255,170,140,0.26)'; g.beginPath(); g.arc(cx - dx * 1, cy - dy * 1, r * 0.8, ang + Math.PI * 0.62, ang + Math.PI * 1.38); g.stroke();
+      }
+    }
+  }
+
+  // —— 腿爪（四根爪）——
+  function edLeg(g, x, y, ang, S, P, t) {
+    g.save(); g.translate(x, y); g.rotate(ang); g.scale(S, S); g.lineCap = 'round'; g.lineJoin = 'round';
+    const up = edCurve([0, 0], [10, 12], [24, 14], [34, 26 + Math.sin(t * 2) * 2], 8);
+    const lo = edCurve([34, 26], [40, 36], [52, 38], [64, 44], 8);
+    edTaper(g, up, 16, 11, P.mid, P.edge); edTaper(g, lo, 11, 8, P.mid, P.edge);
+    // 肘毛（火焰）
+    for (let k = 0; k < 3; k++) { const pts = edCurve([32, 26], [26 - k * 5, 38 + k * 4], [14 - k * 7, 44 + k * 7], [4 - k * 9, 48 + k * 9 + Math.sin(t * 3 + k) * 3], 8); edTaper(g, pts, 9, 1, P.mane1); }
+    // 爪
+    g.fillStyle = P.mid; g.strokeStyle = P.edge; g.lineWidth = 1; g.beginPath(); g.ellipse(66, 46, 9, 7, 0.5, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = P.belly; for (const [dx, dy, a] of [[-3, -8, -0.5], [6, -9, 0], [14, -4, 0.5], [16, 5, 1.1]]) { g.save(); g.translate(66 + dx, 46 + dy); g.rotate(a + 0.2); g.beginPath(); g.moveTo(-2.6, 0); g.quadraticCurveTo(0, -12, 7, -14); g.quadraticCurveTo(3, -6, 2.6, 0); g.closePath(); g.fill(); g.strokeStyle = 'rgba(100,50,30,0.6)'; g.lineWidth = 0.8; g.stroke(); g.restore(); }
+    g.restore();
+  }
+
+  // —— 組合：依脊線畫整條龍 ——
+  function edDragon(g, spine, o) {
+    const P = o.palette || ED_RED, n = spine.length, size = o.size || 24, t = o.time || 0;
+    const widthAt = (i) => { const u = i / (n - 1); return size * 1.9 * Math.max(0.1, Math.sin(Math.min(1, u * 1.2 + 0.18) * Math.PI * 0.5) * (1 - u * 0.86)) * (u < 0.06 ? 0.85 : 1); };
+    // 尾端火焰
+    const tl = spine[n - 1], t2 = spine[n - 4]; const tang = Math.atan2(tl[1] - t2[1], tl[0] - t2[0]);
+    for (let k = -1; k <= 1; k++) { const a = tang + k * 0.5 + Math.sin(t * 3 + k) * 0.15, len = size * (1.6 - Math.abs(k) * 0.4); const pts = edCurve([tl[0], tl[1]], [tl[0] + Math.cos(a) * len * 0.4, tl[1] + Math.sin(a) * len * 0.4], [tl[0] + Math.cos(a + 0.4) * len * 0.8, tl[1] + Math.sin(a + 0.4) * len * 0.8], [tl[0] + Math.cos(a) * len, tl[1] + Math.sin(a) * len], 10); edTaper(g, pts, size * 0.35, 1, P.mane1); }
+    // 後腿 / 前腿（在身體後面）
+    if (o.legs !== false) for (const [i, side] of [[Math.floor(n * 0.22), 1], [Math.floor(n * 0.5), 1], [Math.floor(n * 0.5), -1]]) { const p = spine[i], q = spine[i + 1]; const a = Math.atan2(q[1] - p[1], q[0] - p[0]); edLeg(g, p[0], p[1], a + (side > 0 ? Math.PI / 2 - 0.5 : -Math.PI / 2 + 0.5), size / 28 * (side > 0 ? 1 : 0.8), P, t); }
+    edBody(g, spine, widthAt, P, o);
+    // 頭
+    const h0 = spine[0], h1 = spine[3]; const ang = Math.atan2(h0[1] - h1[1], h0[0] - h1[0]);
+    g.save(); g.translate(h0[0], h0[1]); g.rotate(ang); const flip = Math.cos(ang) < 0 ? -1 : 1; if (flip < 0) g.scale(1, -1);
+    edHead(g, size / 20 * (o.headScale || 1), t, P, o.open);
+    g.restore();
+  }
+
   // =========================================================
-  // 飛龍：祥雲、金龍追逐火焰寶珠（龍身沿軌跡蜿蜒、背鰭、龍角、龍鬚）
+  // 飛龍：祥雲、東方紅龍追逐火焰寶珠（龍身沿軌跡蜿蜒）
   // =========================================================
   class Dragon {
     constructor(low) { this.low = low; this.flash = 0; this.t = 0; this.speed = 1; this.bloomScale = 0.6; }
@@ -3071,77 +3268,8 @@
       for (let q = 0; q < 3; q++) { g.beginPath(); g.arc(ph[0], ph[1], pr * (1.3 + q * 0.35), t / 300 + q * 2, t / 300 + q * 2 + 1.6); g.stroke(); }
       glow(g, F[0].x, F[0].y, this.maxW * 6, '255,190,90', 0.12 + this.flash * 0.2);
       g.globalCompositeOperation = 'source-over';
-      // 遠側的腳（先畫，被身體擋住）
-      for (const [i, ph2] of [[7, 0], [25, 2]]) if (F[i]) this.leg(g, F[i], -1, t, ph2 + 1.5, false);
-      // 背鰭
-      for (let i = 3; i < n - 4; i += 2) {
-        const f = F[i], fl = f.r * 1.25 * Math.abs(f.sg);
-        if (fl < 1) continue;
-        const nx = f.nx * Math.sign(f.sg), ny = f.ny * Math.sign(f.sg);
-        const bxp = f.x + nx * f.r * 0.8, byp = f.y + ny * f.r * 0.8;
-        const tx = bxp + nx * fl - f.dx * fl * 0.9, ty = byp + ny * fl - f.dy * fl * 0.9;
-        g.fillStyle = i % 4 === 1 ? '#ff7a2a' : '#d42c1c';
-        g.beginPath(); g.moveTo(bxp + f.dx * f.r * 0.5, byp + f.dy * f.r * 0.5);
-        g.quadraticCurveTo(bxp + nx * fl * 0.6, byp + ny * fl * 0.6, tx, ty);
-        g.lineTo(bxp - f.dx * f.r * 0.7, byp - f.dy * f.r * 0.7); g.fill();
-      }
-      // 尾端火焰
-      const tl = F[n - 1], tl2 = F[n - 4];
-      for (let q = 0; q < 3; q++) {
-        const ang = Math.atan2(-tl2.dy, -tl2.dx) + (q - 1) * 0.5 + Math.sin(t / 200 + q) * 0.15;
-        const len = this.maxW * (2.2 - Math.abs(q - 1) * 0.6);
-        g.fillStyle = q === 1 ? '#ff8a32' : '#d42c1c';
-        g.beginPath(); g.moveTo(tl.x, tl.y);
-        g.quadraticCurveTo(tl.x + Math.cos(ang + 0.4) * len * 0.6, tl.y + Math.sin(ang + 0.4) * len * 0.6, tl.x + Math.cos(ang) * len, tl.y + Math.sin(ang) * len);
-        g.quadraticCurveTo(tl.x + Math.cos(ang - 0.4) * len * 0.5, tl.y + Math.sin(ang - 0.4) * len * 0.5, tl.x, tl.y); g.fill();
-      }
-      // 身體：一整條連續的管狀輪廓
-      const back = F.map((f) => [f.x + f.nx * f.r, f.y + f.ny * f.r]);
-      const belly = F.map((f) => [f.x - f.nx * f.r, f.y - f.ny * f.r]);
-      g.beginPath();
-      back.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-      for (let i = n - 1; i >= 0; i--) g.lineTo(belly[i][0], belly[i][1]);
-      g.closePath();
-      g.fillStyle = '#a8621a'; g.fill();
-      g.strokeStyle = '#5e3208'; g.lineWidth = 1.4 * sc; g.stroke();
-      // 背部較暗、中段金亮的光影
-      g.save(); g.clip();
-      g.lineCap = 'round'; g.lineJoin = 'round';
-      const band = (off, wd, col) => {
-        g.strokeStyle = col; g.lineWidth = wd;
-        g.beginPath(); F.forEach((f, i) => { const x = f.x + f.nx * f.r * off * f.sg, y = f.y + f.ny * f.r * off * f.sg; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
-      };
-      band(0.85, this.maxW * 0.5, 'rgba(120,60,10,0.55)');
-      band(0.3, this.maxW * 0.5, 'rgba(240,180,70,0.6)');
-      band(0.4, this.maxW * 0.14, 'rgba(255,235,170,0.55)');
-      // 鱗片
-      g.strokeStyle = 'rgba(110,55,8,0.55)'; g.lineWidth = Math.max(0.8, 0.9 * sc);
-      for (let i = 2; i < n - 2; i += 2) {
-        const f = F[i];
-        if (f.r < 3 * sc) continue;
-        const a = Math.atan2(f.dy, f.dx);
-        for (const off of (i % 2 ? [0.55, -0.05] : [0.25, 0.85])) {
-          const x = f.x + f.nx * f.r * off * f.sg, y = f.y + f.ny * f.r * off * f.sg;
-          g.beginPath(); g.arc(x, y, f.r * 0.32, a + Math.PI * 0.55, a + Math.PI * 1.45); g.stroke();
-        }
-      }
-      g.restore();
-      // 腹甲：奶油色帶 + 橫紋
-      g.beginPath();
-      F.forEach((f, i) => { const x = f.x - f.nx * f.r * 0.35 * f.sg, y = f.y - f.ny * f.r * 0.35 * f.sg; i ? g.lineTo(x, y) : g.moveTo(x, y); });
-      for (let i = n - 1; i >= 0; i--) { const f = F[i]; g.lineTo(f.x - f.nx * f.r * 0.98 * f.sg, f.y - f.ny * f.r * 0.98 * f.sg); }
-      g.closePath();
-      g.fillStyle = '#e8c88a'; g.fill();
-      g.strokeStyle = 'rgba(140,90,40,0.55)'; g.lineWidth = Math.max(0.8, 0.9 * sc);
-      for (let i = 1; i < n - 2; i += 2) {
-        const f = F[i];
-        if (f.r < 2 * sc) continue;
-        if (Math.abs(f.sg) < 0.2) continue;
-        g.beginPath(); g.moveTo(f.x - f.nx * f.r * 0.35 * f.sg, f.y - f.ny * f.r * 0.35 * f.sg); g.lineTo(f.x - f.nx * f.r * 0.98 * f.sg, f.y - f.ny * f.r * 0.98 * f.sg); g.stroke();
-      }
-      // 近側的腳
-      for (const [i, ph2] of [[5, 0], [23, 2]]) if (F[i]) this.leg(g, F[i], 1, t, ph2, true);
-      this.drawHead(g, F[0], t);
+      // 東方紅龍：沿著飛行軌跡畫整條龍（龍頭、鹿角、龍鬚、鱗片、背刺、腳爪）
+      edDragon(g, segs, { size: this.maxW * 1.6, time: t / 1000, palette: ED_RED, headScale: 0.5, open: 0.22 + this.flash * 0.2 });
       // 前景雲：龍在雲間穿梭
       for (const c of this.clouds) if (c.front) drawCloud(c);
       g.globalAlpha = 1;
