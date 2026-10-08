@@ -393,4 +393,53 @@ test('垃圾行把方塊頂出頂部 → 遊戲結束', () => {
   assert.equal(ev.find((e) => e[0] === 'gameOver')[1].reason, 'garbage');
 });
 
+test('Zone：消行集量表，不到 1/4 不能發動', () => {
+  const g = new Game({ seed: 7, settings: { zone: true, zoneLines: 24 } });
+  setBottom(g, ['#########.']);
+  put(g, 'I', 1, 7, 30);
+  g.press('hardDrop');
+  assert.ok(Math.abs(g.zoneMeter - 1 / 24) < 1e-9);
+  g.press('zone');
+  assert.equal(g.zone, null);
+  g.zoneMeter = 0.5;
+  g.press('zone');
+  assert.ok(g.zone && g.zone.t === 10000);
+  assert.equal(g.zoneMeter, 0);
+});
+
+test('Zone：時間停止、消的行沉到底部，時間到一次清除並加分', () => {
+  const g = new Game({ seed: 7, settings: { zone: true } });
+  g.zoneMeter = 1;
+  g.press('zone');
+  // 時間停止：方塊不會自己落下
+  const y0 = g.cur.y;
+  g.update(3000);
+  assert.equal(g.cur.y, y0);
+  setBottom(g, ['#########.', '#########.']);
+  put(g, 'I', 1, 7, 30);
+  const ev = events(g);
+  g.press('hardDrop');
+  assert.equal(g.zoneRows, 2);
+  assert.ok(g.board[H - 1].every((v) => v === 9) && g.board[H - 2].every((v) => v === 9));
+  assert.equal(g.lines, 0);
+  assert.ok(ev.some((e) => e[0] === 'zoneLine'));
+  // Zone 行不會被當成一般消行
+  setBottom(g, ['#########.']);
+  g.board[H - 1].fill(9); g.board[H - 2].fill(9); g.zoneRows = 2;
+  const score0 = g.score;
+  g.update(20000);
+  assert.equal(g.zone, null);
+  assert.equal(g.zoneRows, 0);
+  assert.equal(g.lines, 2);
+  assert.ok(g.score > score0);
+  assert.ok(ev.some((e) => e[0] === 'zoneEnd' && e[1].lines === 2));
+});
+
+test('Zone：對戰預設關閉', () => {
+  const g = new Game({ seed: 7 });
+  g.zoneMeter = 1;
+  g.press('zone');
+  assert.equal(g.zone, null);
+});
+
 console.log(`\n${passed} passed`);

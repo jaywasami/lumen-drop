@@ -1,20 +1,20 @@
 'use strict';
 /* 輸入：鍵盤 / 手把 / 螢幕按鍵 / 手勢 → 統一轉成遊戲動作 */
 (function (root) {
-  const ACTIONS = ['left', 'right', 'softDrop', 'hardDrop', 'cw', 'ccw', 'r180', 'hold'];
+  const ACTIONS = ['left', 'right', 'softDrop', 'hardDrop', 'cw', 'ccw', 'r180', 'hold', 'zone'];
   const HELD = new Set(['left', 'right', 'softDrop']);
   const DEFAULT_KEYS = {
     left: ['ArrowLeft'], right: ['ArrowRight'], softDrop: ['ArrowDown'], hardDrop: ['Space'],
-    cw: ['ArrowUp', 'KeyX'], ccw: ['KeyZ'], r180: ['KeyA'], hold: ['KeyC', 'ShiftLeft', 'ShiftRight'],
+    cw: ['ArrowUp', 'KeyX'], ccw: ['KeyZ'], r180: ['KeyA'], hold: ['KeyC', 'ShiftLeft', 'ShiftRight'], zone: ['KeyV'],
   };
   const ACTION_LABEL = {
     left: '向左', right: '向右', softDrop: '軟降', hardDrop: '硬降',
-    cw: '順時針', ccw: '逆時針', r180: '旋轉 180°', hold: '暫存',
+    cw: '順時針', ccw: '逆時針', r180: '旋轉 180°', hold: '暫存', zone: '發動 Zone',
   };
   // 標準手把 (Gamepad "standard" mapping)
   const PAD_BUTTONS = {
     0: 'cw', 1: 'ccw', 2: 'hold', 3: 'r180', 4: 'hold', 5: 'cw', 6: 'ccw', 7: 'hardDrop',
-    12: 'hardDrop', 13: 'softDrop', 14: 'left', 15: 'right',
+    10: 'zone', 11: 'zone', 12: 'hardDrop', 13: 'softDrop', 14: 'left', 15: 'right',
   };
 
   class Input {

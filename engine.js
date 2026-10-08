@@ -96,6 +96,9 @@
     gravityScale: 1, // 等級對速度的影響倍率（< 1 = 加速較慢）
     reward: 1, // 過關獎勵：升級後該關起始速度倍率（< 1 = 先放慢，隨消行逐漸加回 1）
     maxGarbagePerLock: 8, // 對戰：每次放下方塊最多頂上來幾行垃圾
+    zone: false, // Zone 模式（單機）
+    zoneLines: 24, // 消幾行集滿 Zone 量表
+    zoneMaxMs: 20000, // 量表全滿可停止時間多久
   };
 
   function gravityCps(level) {
@@ -135,6 +138,9 @@
       this.garbageRng = mulberry32((this.seed ^ 0x9e3779b9) >>> 0);
       this.attackSent = 0;
       this.garbageTaken = 0;
+      this.zoneMeter = 0; // 0~1
+      this.zone = null; // { t, max, lines }
+      this.zoneRows = 0; // 底部累積的 Zone 行數
       this.held = { left: false, right: false, softDrop: false };
       this.activeDir = 0;
       this.das = 0;
@@ -273,7 +279,44 @@
         case 'ccw': this.rotate(-1); break;
         case 'r180': this.rotate(2); break;
         case 'hold': this.doHold(); break;
+        case 'zone': this.activateZone(); break;
       }
+    }
+
+    // ---------- Zone：時間停止，消掉的行沉到底部累積，時間到一次清掉 ----------
+    activateZone() {
+      if (!this.settings.zone || this.zone || this.over || this.zoneMeter < 0.25) return false;
+      const ms = this.zoneMeter * this.settings.zoneMaxMs;
+      this.zone = { t: ms, max: ms, lines: 0 };
+      this.zoneMeter = 0;
+      this.gAcc = 0;
+      this.emit('zoneStart', { ms });
+      return true;
+    }
+
+    endZone() {
+      const z = this.zone;
+      if (!z) return;
+      this.zone = null;
+      const n = this.zoneRows;
+      this.zoneRows = 0;
+      if (!n) { this.emit('zoneEnd', { lines: 0, gained: 0 }); return; }
+      const rows = [];
+      for (let y = H - n; y < H; y++) rows.push({ y, row: Array.from(this.board[y]) });
+      const fresh = [];
+      for (let i = 0; i < n; i++) fresh.push(new Uint8Array(W));
+      this.board = fresh.concat(this.board.slice(0, H - n));
+      // 目前方塊跟著盤面一起往下，避免和下沉的方塊重疊
+      if (this.cur && this.collides(this.cur.type, this.cur.rot, this.cur.x, this.cur.y)) this.cur.y = Math.min(this.cur.y + n, this.ghostY());
+      const prevLevel = this.level;
+      const gained = Math.round(n * n * 50 * this.level);
+      this.score += gained;
+      this.lines += n;
+      this.level = this.settings.startLevel + Math.floor(this.lines / this.settings.linesPerLevel);
+      const pc = this.board.every((row) => row.every((v) => v === 0));
+      this.emit('zoneEnd', { lines: n, gained });
+      this.emit('clear', { lines: n, rows, zone: true, tspin: false, mini: false, combo: -1, b2b: false, pc, gained, type: 'I' });
+      if (this.level > prevLevel) this.emit('levelUp', { level: this.level });
     }
 
     release(action) {
@@ -412,13 +455,29 @@
         return;
       }
 
-      // 找出滿列
+      // 找出滿列（不含底部已累積的 Zone 行）
       const full = [];
-      for (let y = H - 1; y >= 0; y--) {
+      for (let y = H - 1 - this.zoneRows; y >= 0; y--) {
         if (this.board[y].every((v) => v !== 0)) full.push(y);
       }
       const n = full.length;
       const clearedRows = full.map((y) => ({ y, row: Array.from(this.board[y]) }));
+      if (this.zone) {
+        // Zone 中：滿列不消失，變成白色並沉到底部（疊在舊的 Zone 行上方）
+        if (n) {
+          const top = H - this.zoneRows;
+          const normal = this.board.slice(0, top).filter((_, y) => !full.includes(y));
+          const sunk = full.map(() => new Uint8Array(W).fill(9));
+          this.board = normal.concat(sunk, this.board.slice(top));
+          this.zoneRows += n;
+          this.zone.lines += n;
+        }
+        this.emit('lock', { cells, type: p.type, lines: n, tspin, mini, attack: 0 });
+        if (n) this.emit('zoneLine', { lines: n, total: this.zoneRows, rows: clearedRows });
+        this.canHold = true;
+        this.spawn();
+        return;
+      }
       if (n) {
         const keep = this.board.filter((_, y) => !full.includes(y));
         const fresh = [];
@@ -445,6 +504,7 @@
         if (this.combo > 0) base += 50 * this.combo * this.level;
         gained += base;
         this.lines += n;
+        if (this.settings.zone) this.zoneMeter = Math.min(1, this.zoneMeter + n / this.settings.zoneLines);
         this.level = this.settings.startLevel + Math.floor(this.lines / this.settings.linesPerLevel);
         pc = this.board.every((row) => row.every((v) => v === 0));
         if (pc) {
@@ -507,6 +567,10 @@
     step(dt) {
       this.time += dt;
       const s = this.settings;
+      if (this.zone) {
+        this.zone.t -= dt;
+        if (this.zone.t <= 0) { this.endZone(); if (this.over || !this.cur) return; }
+      }
 
       // 水平自動移動 (DAS / ARR)
       if (this.activeDir !== 0) {
@@ -529,6 +593,7 @@
       let cps = gravityCps(1 + (this.level - 1) * s.gravityScale) * this.rewardMul();
       const soft = this.held.softDrop;
       if (soft) cps = s.sdf >= 40 ? Infinity : cps * s.sdf;
+      else if (this.zone) cps = 0; // 時間停止：不會自己落下
       if (cps === Infinity) {
         let n = 0;
         while (!this.grounded()) { this.cur.y++; n++; }
@@ -554,7 +619,7 @@
       }
 
       // 鎖定延遲
-      if (this.grounded()) {
+      if (this.grounded() && !(this.zone && !soft)) {
         this.lockTimer += dt;
         if (this.lockTimer >= s.lockDelay) this.lockPiece();
       } else {

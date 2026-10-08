@@ -178,3 +178,5 @@ body.post-on #c { opacity: 0; }
 .ver { margin: 2px 0 0; font-size: 12px; color: var(--dim); opacity: 0.75; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 /* 省電光暈：低解析度的 WebGL 光暈以 screen 混色疊在 2D 畫面上 */
 body.post-light #gl { display: block; mix-blend-mode: screen; }
+.zone-btn { background: transparent; border-color: transparent; color: transparent; }
+.zone-btn.ready { border-color: rgba(255, 255, 255, 0.25); }

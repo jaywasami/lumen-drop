@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-1';
+  const VERSION = '2026.10.08-2';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -56,6 +56,7 @@
     document.body.classList.toggle('post-light', !!post && post.lightMode);
   }
   const pauseBtn = $('btn-pause');
+  const zoneBtn = $('btn-zone');
   const overlays = ['menu', 'pause', 'gameover', 'help', 'settings', 'versus', 'room', 'vsresult', 'vsquit'].reduce((o, k) => (o[k] = $(k), o), {});
   function showOverlay(name) {
     for (const k in overlays) overlays[k].classList.toggle('hidden', k !== name);
@@ -177,8 +178,8 @@
   const rgb = (a, al) => (al == null ? `rgb(${a[0] | 0},${a[1] | 0},${a[2] | 0})` : `rgba(${a[0] | 0},${a[1] | 0},${a[2] | 0},${al})`);
 
   // ================= 方塊精靈（依主題換材質） =================
-  const COLORS = { I: '#3de9ff', O: '#ffe14d', T: '#c070ff', S: '#5dff8a', Z: '#ff5d6c', J: '#5d8bff', L: '#ffa94d', G: '#7c8494' };
-  const ID_TYPE = ['', 'I', 'O', 'T', 'S', 'Z', 'J', 'L', 'G']; // 8 = 對戰垃圾行
+  const COLORS = { I: '#3de9ff', O: '#ffe14d', T: '#c070ff', S: '#5dff8a', Z: '#ff5d6c', J: '#5d8bff', L: '#ffa94d', G: '#7c8494', W: '#e6eeff' };
+  const ID_TYPE = ['', 'I', 'O', 'T', 'S', 'Z', 'J', 'L', 'G', 'W']; // 8 = 對戰垃圾行、9 = Zone 累積行
   let sprites = {};
   let spriteKey = '';
 
@@ -333,6 +334,9 @@
     pauseBtn.style.height = `${cell * 1.7}px`;
     pauseBtn.style.fontSize = `${Math.max(11, cell * 0.55)}px`;
     pauseBtn.textContent = vs && vs.kind === 'net' ? '離開' : '❚❚';
+    zoneBtn.style.left = `${lx}px`; zoneBtn.style.top = `${by + cell * 13.7}px`;
+    zoneBtn.style.width = `${sideW}px`; zoneBtn.style.height = `${cell * 2.7}px`;
+    zoneBtn.classList.toggle('hidden', !!vs);
     touchEl.classList.toggle('mode-gesture', settings.controls === 'gesture');
     touchEl.classList.toggle('show180', !!settings.show180);
     applyCustomPad();
@@ -602,7 +606,8 @@
         if (scene) scene.burst(Object.assign({}, d, { rows: d.rows.map((r) => ({ vy: r.y - HIDDEN })) }), boardInfo());
         const names = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS'];
         const lines = [];
-        if (d.tspin) lines.push('T-SPIN' + (d.mini ? ' MINI' : '') + (n ? ' ' + names[n] : ''));
+        if (d.zone) lines.push(zoneName(n), `${n} LINES`);
+        else if (d.tspin) lines.push('T-SPIN' + (d.mini ? ' MINI' : '') + (n ? ' ' + names[n] : ''));
         else lines.push(names[n]);
         if (d.b2b) lines.push('BACK-TO-BACK');
         if (d.combo > 0) lines.push(`${d.combo} COMBO`);
@@ -642,6 +647,25 @@
         break;
       }
       case 'attack': if (vs) vsSendAttack(d.lines); break;
+      case 'zoneStart':
+        Snd.setZone(true); Snd.play('zoneStart');
+        zoneFx.on = 1; zoneFx.crescendo = false;
+        popup(['ZONE'], '#e6eeff');
+        fx.flash = Math.max(fx.flash, 0.35); fx.pulse = 1;
+        fx.waves.push({ x: (bx + cell * 5) / vw, y: (by + cell * 10) / vh, t: 0, life: 1.1, s: 1.2 });
+        if (navigator.vibrate && settings.haptics) navigator.vibrate([20, 40, 20]);
+        break;
+      case 'zoneLine': {
+        Snd.play('zoneLine', d);
+        zoneFx.hit = 1;
+        const yb = by + cell * VIS;
+        for (let i = 0; i < 24; i++) addParticle({ x: bx + Math.random() * cell * 10, y: yb - Math.random() * cell * d.total, vx: (Math.random() - 0.5) * cell * 6, vy: -Math.random() * cell * 6, life: 0.8, max: 0.8, size: cell * 0.12, color: '#e6eeff', g: 0 });
+        break;
+      }
+      case 'zoneEnd':
+        Snd.setZone(false); zoneFx.crescendo = false;
+        if (d.lines) Snd.play('zoneEnd', d);
+        break;
       case 'garbageQueued':
         if (!vs) break;
         Snd.play('warn');
@@ -668,6 +692,7 @@
         break;
       }
       case 'gameOver':
+        Snd.setZone(false);
         if (vs) {
           Snd.setBoost(0); Snd.setBuild(false); Snd.play('gameOver');
           input.releaseAll();
@@ -683,6 +708,16 @@
         break;
     }
   }
+  // Zone 結算名稱（沿用 Tetris Effect 的說法）
+  function zoneName(n) {
+    if (n >= 20) return 'ULTIMATRIS';
+    if (n >= 18) return 'PERFECTRIS';
+    if (n >= 16) return 'DECAHEXATRIS';
+    if (n >= 12) return 'DODECATRIS';
+    if (n >= 8) return 'OCTORIS';
+    return 'ZONE CLEAR';
+  }
+  const zoneFx = { on: 0, hit: 0, crescendo: false };
   function popup(lines, color) { fx.popups.push({ lines, color, t: 0, life: 1.5 }); if (fx.popups.length > 3) fx.popups.shift(); }
 
   // ================= 遊戲流程 =================
@@ -696,7 +731,7 @@
     const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.relaxed;
     game = versus
       ? new E.Game({ seed: opts.seed, settings: vsGameSettings(), onEvent: onGameEvent })
-      : new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale, reward: diff.reward }, onEvent: onGameEvent });
+      : new E.Game({ settings: { das: settings.das, arr: settings.arr, sdf: settings.sdf, startLevel: lv, linesPerLevel: diff.linesPerLevel, gravityScale: diff.gravityScale, reward: diff.reward, zone: true }, onEvent: onGameEvent });
     levelStart = { time: 0, score: 0, lines: 0, maxCombo: 0 };
     tr = null;
     fx.particles.length = 0; fx.flashes.length = 0; fx.rings.length = 0; fx.streaks.length = 0; fx.popups.length = 0; fx.lockFlash.length = 0;
@@ -707,6 +742,7 @@
     Snd.setMuffled(false);
     Snd.setBoost(0);
     Snd.setBuild(false);
+    Snd.setZone(false); zoneFx.on = 0; zoneFx.crescendo = false;
     intensity = musicStage();
     Snd.playSong(THEMES[idx].name, musicStage(), musicRate());
     mode = 'countdown'; countdown = 2.2; lastCount = 4;
@@ -726,6 +762,7 @@
   }
   function toMenu() {
     cleanupVs();
+    Snd.setZone(false); zoneFx.on = 0;
     mode = 'menu'; input.releaseAll(); game = null; showOverlay('menu');
     layout();
     touchEl.classList.add('hidden');
@@ -1483,6 +1520,7 @@
 
   // ================= 繪圖 =================
   let beat = 0;
+  let fftLast = 0, fftBass = 0, beatSmooth = 0;
   let intensity = 0;
   function drawBackground(t) {
     const B = boardInfo();
@@ -1540,6 +1578,28 @@
         const id = row[x];
         if (id) drawCell(ID_TYPE[id], bx + x * cell, by + (y - HIDDEN + dy) * cell, cell);
       }
+    }
+    // 方塊隨低音呼吸：再疊一層加亮（省電以上才有）
+    if (settings.fx !== 'low' && beat > 0.06) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = beat * 0.22;
+      for (let y = HIDDEN; y < H; y++) {
+        const row = b[y];
+        for (let x = 0; x < W; x++) if (row[x] && row[x] !== 9) drawCell(ID_TYPE[row[x]], bx + x * cell, by + (y - HIDDEN) * cell, cell);
+      }
+      ctx.restore();
+    }
+    // Zone 累積行：白光脈動
+    if (game.zoneRows) {
+      const k = 0.35 + 0.25 * Math.sin(performance.now() / 180) + zoneFx.hit * 0.4;
+      const top = by + (VIS - game.zoneRows) * cell;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const gr = ctx.createLinearGradient(0, top, 0, by + cell * VIS);
+      gr.addColorStop(0, `rgba(220,235,255,${k * 0.5})`); gr.addColorStop(1, `rgba(160,200,255,${k * 0.2})`);
+      ctx.fillStyle = gr; ctx.fillRect(bx, top, cell * 10, game.zoneRows * cell);
+      ctx.restore();
     }
   }
 
@@ -1621,6 +1681,41 @@
     if (game.combo > 0) { label(`${game.combo} COMBO`, rx + sideW / 2, y + cell * 0.5, cell * 0.55, '#8be9ff', 'center', 800); y += cell * 1.2; }
     if (game.b2b) label('B2B', rx + sideW / 2, y + cell * 0.5, cell * 0.55, '#ffe98a', 'center', 800);
     if (vs) drawVsHud(lx, rx);
+    else drawZoneMeter(lx);
+  }
+  function drawZoneMeter(lx) {
+    const y = by + cell * 13.7, h = cell * 2.7;
+    const z = game.zone, m = z ? Math.max(0, z.t / z.max) : game.zoneMeter;
+    const ready = !z && m >= 0.25;
+    panelBox(lx, y, sideW, h);
+    const cx = lx + sideW / 2, cy = y + h * 0.56, r = Math.min(sideW, h) * 0.3;
+    ctx.lineWidth = cell * 0.22;
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = z ? '#e6eeff' : ready ? rgb(mix(accent, [255, 255, 255], 0.5)) : rgb(accent, 0.7);
+    if (ready || z) { ctx.shadowColor = '#fff'; ctx.shadowBlur = cell * (0.4 + 0.3 * Math.sin(performance.now() / 200)); }
+    ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + TAU * m); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5;
+    for (let q = 0; q < 4; q++) { const a = -Math.PI / 2 + q * Math.PI / 2; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (r - cell * 0.13), cy + Math.sin(a) * (r - cell * 0.13)); ctx.lineTo(cx + Math.cos(a) * (r + cell * 0.13), cy + Math.sin(a) * (r + cell * 0.13)); ctx.stroke(); }
+    label('ZONE', lx + sideW / 2, y + cell * 0.42, cell * 0.36, z || ready ? '#fff' : 'rgba(200,210,245,0.75)', 'center', 700);
+    if (z) label(String(game.zoneRows), cx, cy, cell * 0.55, '#fff', 'center', 800);
+    else if (ready) label('發動', cx, cy, cell * 0.36, '#fff', 'center', 700);
+    zoneBtn.classList.toggle('ready', ready);
+  }
+  const TAU = Math.PI * 2;
+  function drawZoneOverlay() {
+    const z = game.zone;
+    const k = zoneFx.on;
+    if (k <= 0.01) return;
+    // 時間停止：整個畫面偏藍變暗，場地四周白光
+    ctx.fillStyle = `rgba(6,10,30,${0.45 * k})`;
+    ctx.fillRect(0, 0, vw, vh);
+    if (z) {
+      const m = Math.max(0, z.t / z.max);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(bx, by - cell * 0.45, cell * 10, cell * 0.18);
+      ctx.fillStyle = m < 0.15 ? '#ffd27a' : '#e6eeff'; ctx.fillRect(bx, by - cell * 0.45, cell * 10 * m, cell * 0.18);
+    }
   }
 
   function drawEffects() {
@@ -1722,6 +1817,8 @@
     }
     if (settings.showFps) drawFps();
     if (!game) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawZoneOverlay();
     ctx.save();
     if (fx.shake > 0.3) ctx.translate((Math.random() - 0.5) * fx.shake, (Math.random() - 0.5) * fx.shake);
     ctx.save();
@@ -1789,10 +1886,21 @@
     }
     updateVs(dt);
     const bi = Snd.beatInfo();
-    beat = bi.playing ? Math.exp(-bi.phase * 5) * (bi.drums ? 1 : 0.55) : 0;
+    if (settings.fx !== 'low' && Snd.analyser && bi.playing) {
+      // 用 FFT 讀低音能量驅動畫面（每秒最多約 60 次），衰減讓光暈有餘韻
+      if (ts - fftLast >= 15) { fftLast = ts; fftBass = Snd.bassLevel(); }
+      beatSmooth = Math.max(fftBass, beatSmooth * Math.pow(0.004, dt / 1000));
+      beat = beatSmooth;
+    } else beat = bi.playing ? Math.exp(-bi.phase * 5) * (bi.drums ? 1 : 0.55) : 0;
+    // Zone：淡入淡出、結束前 1.5 秒開始漸強
+    const zOn = game && game.zone ? 1 : 0;
+    zoneFx.on += (zOn - zoneFx.on) * Math.min(1, dt / 250);
+    zoneFx.hit *= Math.pow(0.05, dt / 1000);
+    if (game && game.zone && game.zone.t < 1500 && !zoneFx.crescendo && mode === 'playing') { zoneFx.crescendo = true; Snd.zoneCrescendo(game.zone.t / 1000); }
     updateTheme(dt);
-    if (scene) { if (scene.setIntensity) scene.setIntensity(game ? intensity : 1); scene.update(dt); }
-    if (prevScene) prevScene.update(dt);
+    const sdt = dt * (1 - 0.8 * zoneFx.on); // Zone 中背景慢動作
+    if (scene) { if (scene.setIntensity) scene.setIntensity(game ? intensity : 1); scene.update(sdt); }
+    if (prevScene) prevScene.update(sdt);
     if (tr && tr.prev) tr.prev.update(dt);
     updateFx(dt);
     render(ts);
@@ -1979,6 +2087,7 @@
   $('btn-quit').addEventListener('click', ui(toMenu));
   $('btn-again').addEventListener('click', ui(() => startGame()));
   $('btn-over-quit').addEventListener('click', ui(toMenu));
+  zoneBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); ensureAudio(); input.press('zone', 'zbtn'); });
   pauseBtn.addEventListener('click', () => { ensureAudio(); if (vs && vs.kind === 'net') toggleVsQuit(); else pauseGame(); });
   $('btn-fs').addEventListener('click', ui(async () => {
     try {

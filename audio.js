@@ -358,6 +358,12 @@
       this.musicBus = c.createGain(); this.musicBus.gain.value = this.musicVol;
       this.stageGain = c.createGain(); this.stageGain.gain.value = 0.8;
       this.musicBus.connect(this.musicTone); this.musicTone.connect(this.stageGain); this.stageGain.connect(this.masterFilter);
+      // 低音分析（FFT）：只接在音樂上，給畫面讀取低音能量
+      this.analyser = c.createAnalyser();
+      this.analyser.fftSize = 1024; this.analyser.smoothingTimeConstant = 0.35;
+      this.stageGain.connect(this.analyser);
+      this.fftData = new Uint8Array(this.analyser.frequencyBinCount);
+      this.bassPeak = 0.2;
       this.musicWet = c.createGain(); this.musicWet.gain.value = this.musicVol;
       this.musicWet.connect(this.wetTone); this.wetTone.connect(this.fxIn);
       this.sfxBus = c.createGain(); this.sfxBus.gain.value = this.sfxVol; this.sfxBus.connect(this.masterFilter);
@@ -406,7 +412,50 @@
       if (!this.ctx) return;
       const t = this.ctx.currentTime;
       this.musicBus.gain.setTargetAtTime(v, t, 0.05);
-      this.musicWet.gain.setTargetAtTime(v, t, 0.05);
+      this.musicWet.gain.setTargetAtTime(v * (this.zone ? 2.4 : 1), t, 0.05);
+    },
+
+    // 低音能量 0~1（約 45~230Hz），以自適應峰值正規化，強調鼓點的衝擊
+    bassLevel() {
+      if (!this.analyser || !this.ctx || this.ctx.state !== 'running') return 0;
+      this.analyser.getByteFrequencyData(this.fftData);
+      const d = this.fftData;
+      const raw = (d[1] + d[2] + d[3] + d[4]) / (4 * 255);
+      this.bassPeak = Math.max(raw, this.bassPeak * 0.997, 0.12);
+      const lv = raw / this.bassPeak;
+      return Math.max(0, Math.min(1, (lv - 0.55) / 0.45));
+    },
+
+    // ---------- Zone：悶住的音樂 + 加深殘響；結束前漸強 ----------
+    setZone(on) {
+      this.zone = !!on;
+      this.zoneRise = false;
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      this.musicWet.gain.cancelScheduledValues(t);
+      this.musicWet.gain.setTargetAtTime(this.musicVol * (on ? 2.4 : 1), t, on ? 0.15 : 0.08);
+      const p = this.current();
+      this.applyTone(p ? p.stageTarget : 0);
+    },
+    zoneCrescendo(sec) {
+      if (!this.ctx || this.zoneRise) return;
+      this.zoneRise = true;
+      const now = this.ctx.currentTime;
+      for (const node of [this.musicTone, this.wetTone]) {
+        node.frequency.cancelScheduledValues(now);
+        node.frequency.setValueAtTime(Math.max(200, node.frequency.value), now);
+        node.frequency.exponentialRampToValueAtTime(18000, now + sec);
+      }
+      this.stageGain.gain.cancelScheduledValues(now);
+      this.stageGain.gain.setValueAtTime(this.stageGain.gain.value, now);
+      this.stageGain.gain.linearRampToValueAtTime(1.4, now + sec);
+      this.riser(now, now + sec);
+      // 越來越密的鼓滾奏
+      const N = 22;
+      for (let i = 0; i < N; i++) {
+        const k = Math.sqrt(i / N);
+        this.drum(i % 4 === 0 ? 'taikoBig' : 'snare', now + sec * k, 0.25 + 0.75 * (i / N), this.sfxOut);
+      }
     },
     setSfxVolume(v) {
       this.sfxVol = v;
@@ -873,11 +922,13 @@
 
     applyTone(stage, at) {
       if (!this.ctx) return;
-      const f = this.boost >= 2 || this.build ? 20000 : [1500, 2600, 4200, 8000, 14000, 20000][Math.max(0, Math.min(5, stage))];
+      if (this.zoneRise) return; // 漸強進行中，不要打斷
+      let f = this.boost >= 2 || this.build ? 20000 : [1500, 2600, 4200, 8000, 14000, 20000][Math.max(0, Math.min(5, stage))];
+      if (this.zone) f = 650; // Zone 中：像隔著水聽音樂
       const t = Math.max(at || 0, this.ctx.currentTime);
       for (const node of [this.musicTone, this.wetTone]) {
         node.frequency.cancelScheduledValues(t);
-        node.frequency.setTargetAtTime(f, t, 0.8);
+        node.frequency.setTargetAtTime(f, t, this.zone ? 0.1 : 0.8);
       }
       const st = Math.max(0, Math.min(5, stage));
       const g = [0.5, 0.62, 0.76, 0.98, 1.16, 1.36][st] * (this.boost >= 2 || this.build ? 1.08 : 1);
@@ -1230,6 +1281,27 @@
           this.noise({ t: now, freq: 900, d: 0.18, peak: 0.12, out });
           this.drum('tom', now, 0.9, out);
           break;
+        case 'zoneStart':
+          // 時間停止：下沉的低音 + 反向鐘聲
+          this.synth({ t: now, f: 110, pitchFrom: 2, glide: 0.6, waves: [['sine', 0, 1], ['triangle', 0, 0.3, 2]], d: 1.2, peak: 0.3, out, wet: 0.6 });
+          [0, 2, 4, 7].forEach((i, k) => this.synth({ t: now + k * 0.07, f: mtof(tone(i, 2)), waves: [['sine', 0, 0.8], ['sine', 0, 0.2, 3]], a: 0.25, d: 1.4, peak: 0.05, out, wet: 0.9 }));
+          break;
+        case 'zoneLine': {
+          // Zone 中每消一行：音高隨累積行數往上爬
+          const k = Math.min(20, d.total || 1);
+          this.synth({ t: now, f: mtof(tone(k, 1)), waves: [['sine', 0, 0.8], ['sine', 0, 0.25, 2], ['triangle', 0, 0.1, 3]], d: 1.2, peak: 0.09, out, wet: 0.8 });
+          this.synth({ t: now + 0.05, f: mtof(tone(k + 2, 1)), waves: [['sine', 0, 0.8]], d: 1, peak: 0.05, out, wet: 0.8 });
+          break;
+        }
+        case 'zoneEnd': {
+          // 結算：大鼓 + 鈸 + 和弦光芒，行數越多越長
+          const n = Math.min(24, d.lines || 0);
+          this.drum('taikoBig', now, 1.3, out);
+          this.drum('crash', now, 1.4, out);
+          this.drum('timpani', now + 0.02, 1, out);
+          for (let i = 0; i < 6 + Math.floor(n / 2); i++) this.synth({ t: now + i * 0.05, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.7], ['triangle', 0, 0.2, 2]], d: 1.6, peak: 0.06, out, wet: 0.8 });
+          break;
+        }
         case 'win':
           [0, 2, 4, 7].forEach((i, k) => this.synth({ t: now + k * 0.09, f: mtof(tone(i, 1)), waves: [['sine', 0, 0.7], ['triangle', 0, 0.25, 2]], d: 1.2, peak: 0.08, out, wet: 0.7 }));
           this.drum('crash', now + 0.3, 1.1, out);
