@@ -4115,6 +4115,8 @@
   class Stadium {
     // 白天的球場很亮，光暈要壓低，不然整片過曝；入夜後才慢慢加強
     get bloomScale() { return 0.12 + 0.68 * Math.max(0, Math.min(1, (this.night - 0.3) / 0.6)); }
+    // 四拍大鼓很密，方塊隨低音加亮要減弱，不然堆疊的方塊一直泛白
+    get blockGlow() { return 0.25 + 0.35 * this.night; }
     constructor(low) { this.low = low; this.night = 0.12; this.target = 0.12; this.cheer = 0; this.balloons = []; this.sparks = []; this.confetti = []; this.streamers = []; this.hr = null; this.fwT = 0; this.stage = 1; }
     resize(w, h) {
       this.w = w; this.h = h;

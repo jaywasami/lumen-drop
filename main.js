@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-16';
+  const VERSION = '2026.10.08-17';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -54,7 +54,8 @@
   function setupPost() {
     if (fxLevel() === 'low') post = null;
     else if (!post) post = window.LumenPost && window.LumenPost.create(glCanvas);
-    if (post) post.setLight(fxLevel() === 'balanced');
+    // 球場這類亮場景即使強制高畫質，光暈仍用輕量版，避免方塊過曝
+    if (post) post.setLight(fxLevel() === 'balanced' || fxBoost);
     document.body.classList.toggle('post-on', !!post && !post.lightMode);
     document.body.classList.toggle('post-light', !!post && post.lightMode);
   }
@@ -1608,7 +1609,7 @@
     if (fxLevel() !== 'low' && beat > 0.06) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = beat * 0.22;
+      ctx.globalAlpha = beat * 0.22 * (scene && scene.blockGlow != null ? scene.blockGlow : 1);
       for (let y = HIDDEN; y < H; y++) {
         const row = b[y];
         for (let x = 0; x < W; x++) if (row[x] && row[x] !== 9) drawCell(ID_TYPE[row[x]], bx + x * cell, by + (y - HIDDEN) * cell, cell);
