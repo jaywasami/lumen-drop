@@ -221,15 +221,22 @@
       drums: { kick: 'x...x...x...x...', clap: '....x.......x...', shaker: 'x.x.x.x.x.x.x.x.' },
       mel: ['4/2 4/2 6/2 4/2 2/4 1/2 2/6 4/2 6/2 7/8', '7/2 6/2 4/4 2/2 4/6 2/4 1/4 0/8'],
     },
-    { // 主場應援：銅管號角主題 + 搖滾鼓 + 失真吉他，副歌全場齊喊（旋律依「龍鳴號角」譜例重新編曲）
-      name: '主場應援', bars: 50, bpm: 138, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 5, 6, 0], chorus: [0, 5, 6, 0], sevenths: false, drive: true, wet: 0.7, vol: 1.0,
-      pad: 'power', padSeq: 'x.....x.x.......', arp: null, bass: 'saw', bassOct: -2, lead: 'trumpetLead', leadOct: 0, epic: 'orch', fixedMel: true, chorusVoice: 'choirLead',
+    { // 主場應援：銅管號角 + 搖滾鼓 + 失真吉他（旋律依鋼琴譜「龍鳴號角（簡單版）」重新編曲，G 小調 ♩=116）
+      name: '主場應援', bars: 38, bpm: 116, steps: 16, beat: 4, root: 55, scale: 'minor', sevenths: false, drive: true, wet: 0.7, vol: 1.0,
+      prog: [0, 4, 5, 0, 0, 4, 4, 4], verseProg: [0, 4, 5, 4, 5, 0, 5, 0], chorus: [5, 0, 5, 2, 3, 2, 3, 4, 0, 0, 0, 5, 0, 0, 0, 5],
+      pad: 'power', padSeq: 'x.....x.x.......', arp: null, bass: 'saw', bassOct: -1, lead: 'trumpetLead', leadOct: 1, epic: 'orch', fixedMel: true, chorusVoice: 'choirLead',
       bassSeq: 'R.R.R.R.R.R.R.R.',
       drums: { kick: 'x.....x.x.......', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', clap: '....x.......x...' },
-      // 簡譜 1=D（小調）：1→0、7,→-1、1'→7；長度以 16 分音符為單位
-      mel: ['0/4 0/4 0/2 2/2 3/2 4/2 5/4 5/4 4/8', '3/4 3/4 2/2 3/2 2/2 0/2 1/16', '0/4 0/4 0/2 2/2 3/2 4/2 5/4 5/4 4/8', '3/4 3/4 2/4 1/4 0/12 r/4'],
-      verse: ['0/4 0/4 0/2 1/2 2/2 3/2 4/8 3/4 2/4', '1/4 1/4 1/2 2/2 1/2 0/2 -1/16', '0/4 0/4 0/2 1/2 2/2 3/2 4/8 5/4 4/4', '3/4 3/4 2/4 1/4 0/16'],
-      chorusMel: ['7/12 6/2 5/2 4/16', '3/4 3/4 3/2 4/2 5/2 4/2 3/8 2/8', '7/12 6/2 5/2 4/16', '3/4 3/4 4/4 4/4 7/16'],
+      // 級數以 G4 為 0（G A B♭ C D E♭ F）：D5→4、G5→7、F4→-1、D4→-3；# 為升半音
+      // 前奏（第 1–5 小節 + 第 14 小節的空拍）
+      mel: ['0/4 4/2 7/2 8/6 6/2 11/12 2/2 3/2', '2/6 3/2 1/4 -1/4 0/16', '0/4 4/2 7/2 8/6 6/2 11/12 2/2 3/2', 'r/4 4/1 6/1 8/1 10/1 6/1 8/1 10/1 11/1 10/1 11/1 13#/2 r/16'],
+      // 主題（第 6–13 小節）
+      verse: ['0/4 4/2 2/2 3/6 2/2 1/4 -1/2 0/2 -3/6 -1/2', '0/4 4/2 2/2 3/4 2/4 4/8 r/2 6/2 4/2 6/2', '7/6 4/2 3/4 2/2 3/2 4/4 2/4 0/6 -1/2', '0/2 1/2 2/2 4/2 3/4 6/4 7/16'],
+      // 副歌：第 15–22 小節（♩=116 全奏）+ 第 23–30 小節（低音 G 持續的段落）
+      chorusMel: ['4/4 0/2 4/2 3/2 2/2 1/2 -1/2 0/2 2/1 1/3 -1/2 0/6 4/2', '7/4 4/2 7/2 6/2 3/2 6/2 5/2 5/2 4/2 4/1 3/3 4/8',
+        '5/4 4/2 3/2 1/2 3/2 6/2 3/2 4/4 3/2 2/2 0/4 1/2 2/2', '3/4 1/2 3/2 3#/4 1/2 3/2 4/4 6#/2 7/2 8/8',
+        'r/2 -3/2 0/2 2/1 1/2 0/2 -1/1 0/2 -3/2 r/2 -3/2 1/2 3/1 2/2 1/2 0/1 1/2 -1#/2', 'r/2 -3/2 0/2 2/1 1/2 -1#/2 0/1 1/2 3/2 5/4 4/4 1/4 2/4',
+        'r/2 -3/2 0/2 2/1 1/2 0/2 -1/1 0/2 -3/2 r/2 -3/2 1/2 3/1 2/2 1/2 0/1 1/2 -1#/2', 'r/2 -3/2 0/2 2/1 1/2 -1#/2 0/1 1/2 3/2 5/4 4/4 1/4 2/4'],
     },
     { // 主場應援 第二首：體育場四拍大鼓 + 側鏈合成器 + 銅管（旋律依 MuseScore 鋼琴譜「龍光乍現」重新編曲，A 小調 ♩=158）
       name: '龍光乍現', bars: 40, bpm: 158, steps: 16, beat: 4, root: 57, scale: 'minor', prog: [0, 0, 0, 0, 3, 2, 5, 4], chorus: [5, 6, 0, 2, 5, 6, 0, 0], sevenths: false, pump: true, wet: 0.8, vol: 1.0,
@@ -248,7 +255,8 @@
   ];
   // 解析旋律字串
   for (const s of SONGS) {
-    const parse = (str) => { const out = []; let pos = 0; for (const tok of str.trim().split(/\s+/)) { const [d, l] = tok.split('/'); const len = +l; if (d !== 'r') out.push([pos, +d, len]); pos += len; } return out; };
+    // 級數後面可加 # 或 b 表示升降半音（例如 6#）
+    const parse = (str) => { const out = []; let pos = 0; for (const tok of str.trim().split(/\s+/)) { const [d, l] = tok.split('/'); const len = +l; if (d !== 'r') { const acc = d.endsWith('#') ? 1 : d.endsWith('b') ? -1 : 0; out.push([pos, parseInt(d, 10), len, acc]); } pos += len; } return out; };
     s.leadSeq = s.mel.map(parse);
     if (s.verse) s.verseSeq = s.verse.map(parse);
     if (s.chorusMel) s.chorusSeq = s.chorusMel.map(parse);
@@ -1007,7 +1015,7 @@
       // 最終副歌升全音（Key change）
       const song = stage >= 5 ? (p.songUp || (p.songUp = Object.assign({}, p.song, { root: p.song.root + 2 }))) : p.song;
       const chorus = stage >= 3;
-      const prog = chorus ? chorusProg(song) : song.prog;
+      const prog = chorus ? chorusProg(song) : (stage >= 2 && song.verseProg) || song.prog;
       const cbar = chorus && p.chorusBar != null ? bar - p.chorusBar : bar;
       const deg = prog[cbar % prog.length];
       if (s16 === 0) {
@@ -1153,10 +1161,10 @@
         const shift = !song.fixedMel && section % 2 === 1 && song.leadSeq.length > 1 && phrase % 2 === 0 ? 2 : 0;
         const lv = stage >= 2 ? 0.8 : 0.55;
         for (let i = 0; i < motif.length; i++) {
-          const [st, d, len] = motif[i];
+          const [st, d, len, acc] = motif[i];
           if (st !== sP) continue;
           const dd = i === motif.length - 1 ? d : d + shift;
-          this.leadNote(t, degToMidi(song, dd, song.leadOct), p.stepDur * len * 0.92, song.lead, out, lv * (0.92 + Math.random() * 0.12));
+          this.leadNote(t, degToMidi(song, dd, song.leadOct) + (acc || 0), p.stepDur * len * 0.92, song.lead, out, lv * (0.92 + Math.random() * 0.12));
         }
       }
       if (chorus) {
@@ -1164,13 +1172,13 @@
         if (song.chorusSeq) {
           // 作好的副歌旋律：兩小節一句，跟著副歌小節數走
           const m = song.chorusSeq[Math.floor(cbar / 2) % song.chorusSeq.length], off = (cbar % 2) * S;
-          notes = m.filter(([st]) => st >= off && st < off + S).map(([st, d, len]) => [st - off, d, len]);
+          notes = m.filter(([st]) => st >= off && st < off + S).map(([st, d, len, acc]) => [st - off, d, len, acc]);
         } else notes = chorusBar(song, deg, cbar, S, Bt);
-        for (const [st, d, len] of notes) {
+        for (const [st, d, len, acc] of notes) {
           if (st !== s16) continue;
-          this.leadNote(t, degToMidi(song, d, song.leadOct), p.stepDur * len * 0.94, song.lead, out, 1);
-          if (song.chorusVoice) this.leadNote(t, degToMidi(song, d, song.leadOct - 1), p.stepDur * len * 0.94, song.chorusVoice, p.outL, stage >= 4 ? 1 : 0.8);
-          if (stage >= 4) this.leadNote(t, degToMidi(song, d, song.leadOct + 1), p.stepDur * len * 0.94, song.lead, p.outR, stage >= 5 ? 0.55 : 0.4);
+          this.leadNote(t, degToMidi(song, d, song.leadOct) + (acc || 0), p.stepDur * len * 0.94, song.lead, out, 1);
+          if (song.chorusVoice) this.leadNote(t, degToMidi(song, d, song.leadOct - 1) + (acc || 0), p.stepDur * len * 0.94, song.chorusVoice, p.outL, stage >= 4 ? 1 : 0.8);
+          if (stage >= 4) this.leadNote(t, degToMidi(song, d, song.leadOct + 1) + (acc || 0), p.stepDur * len * 0.94, song.lead, p.outR, stage >= 5 ? 0.55 : 0.4);
         }
       }
       // 對位旋律（第 3 階起）
