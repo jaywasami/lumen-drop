@@ -231,16 +231,19 @@
       verse: ['0/4 0/4 0/2 1/2 2/2 3/2 4/8 3/4 2/4', '1/4 1/4 1/2 2/2 1/2 0/2 -1/16', '0/4 0/4 0/2 1/2 2/2 3/2 4/8 5/4 4/4', '3/4 3/4 2/4 1/4 0/16'],
       chorusMel: ['7/12 6/2 5/2 4/16', '3/4 3/4 3/2 4/2 5/2 4/2 3/8 2/8', '7/12 6/2 5/2 4/16', '3/4 3/4 4/4 4/4 7/16'],
     },
-    { // 主場應援 第二首：體育場四拍大鼓 + 側鏈合成器 + 銅管，每四小節句尾全場重音（旋律依「龍光乍現」譜例重新編曲）
-      name: '龍光乍現', bars: 40, bpm: 136, steps: 16, beat: 4, root: 62, scale: 'minor', prog: [0, 0, 5, 6], chorus: [0, 5, 6, 0], sevenths: false, pump: true, wet: 0.8, vol: 1.0,
-      pad: 'stab', padSeq: '..x...x...x...x.', arp: null, bass: 'saw', bassOct: -2, lead: 'trumpetLead', leadOct: 0, epic: 'synth', fixedMel: true, chorusVoice: 'choirLead',
+    { // 主場應援 第二首：體育場四拍大鼓 + 側鏈合成器 + 銅管（旋律依 MuseScore 鋼琴譜「龍光乍現」重新編曲，A 小調 ♩=158）
+      name: '龍光乍現', bars: 40, bpm: 158, steps: 16, beat: 4, root: 57, scale: 'minor', prog: [0, 0, 0, 0, 3, 2, 5, 4], chorus: [5, 6, 0, 2, 5, 6, 0, 0], sevenths: false, pump: true, wet: 0.8, vol: 1.0,
+      pad: 'stab', padSeq: '..x...x...x...x.', arp: null, bass: 'saw', bassOct: -1, lead: 'trumpetLead', leadOct: 1, epic: 'synth', fixedMel: true, chorusVoice: 'choirLead',
       bassSeq: 'R.RRR.RRR.RRR.RR',
       drums: { kick: 'x...x...x...x...', clap: '....x.......x...', hat: '..x...x...x...x.' },
-      accent: { every: 4, steps: [12, 14] }, // 句尾第 4 拍與第 4 拍後半的齊喊重音
-      // 簡譜 1=D（小調）：6,→-2、7,→-1、1'→7、2'→8、3'→9
-      mel: ['7/12 6/2 7/2 8/16', '5/2 5/2 5/2 4/2 5/8 6/16', '7/12 6/2 7/2 8/8 9/8', '8/4 7/4 6/4 5/4 7/16'],
-      verse: ['0/4 0/4 0/4 0/2 0/2 0/4 0/4 0/8', '-2/4 -2/4 -2/4 -2/2 -2/2 -1/4 -1/4 -1/8', '0/4 0/4 0/4 0/2 0/2 0/4 0/4 0/8', '-2/4 -2/4 -2/4 -2/2 -2/2 -1/4 -1/4 0/8'],
-      chorusMel: ['7/4 7/4 7/4 7/2 7/2 5/4 5/4 4/8', '3/4 3/4 3/4 3/2 4/2 5/16', '7/4 7/4 7/4 7/2 7/2 5/4 5/4 4/8', '3/2 3/2 4/4 5/4 4/4 0/16'],
+      accent: { every: 4, at: 1, steps: [12] }, // 譜上 A 段第 2、6 小節第 4 拍的重音（高音 G）
+      // 級數以 A4 為 0：G4→-1、E4→-3、D4→-4、C4→-5、A3→-7、G5→6；長度以 16 分音符為單位
+      // 前奏（第 1–8 小節）：E. C D E~E C E 的號角動機
+      mel: ['-3/3 -5/1 -4/2 -3/4 -5/2 -3/4 -3/3 -5/1 -4/2 -3/4 -5/2 -3/4', '-3/3 -5/1 -4/2 -3/4 -5/2 -3/4 -3/3 -5/1 -4/2 -3/4 -5/2 -3/2 -4/2',
+        '-3/3 -5/1 -4/2 -3/4 -5/2 -3/4 -3/3 -5/1 -4/2 -3/4 -5/2 -3/4', 'r/2 -7/1 -5/1 -4/2 -3/4 -6/2 -4/2 -5/2 -2/2 -3/1 -2/1 -3/2 -4/1 -3/1 -1/2 -3/2 1/2 -1/2'],
+      // A 段（第 9–16 小節）
+      chorusMel: ['r/4 0/2 1/2 2/2 2/2 2/2 2/2 1/4 -1/4 1/4 6/2 3/2', 'r/2 0/2 2/2 0/2 2/4 2/2 3/2 4/4 3/4 2/2 3/6',
+        'r/4 0/2 1/2 2/2 2/2 2/2 2/2 1/4 3/2 2/2 1/4 6/2 3/2', '0/6 2/2 3/2 4/2 0/2 -1/2 0/16'],
     },
   ];
   // 解析旋律字串
@@ -1082,7 +1085,7 @@
         }
       }
       // 句尾齊喊重音（第 2 階起）
-      if (song.accent && stage >= 2 && bar % song.accent.every === song.accent.every - 1 && song.accent.steps.includes(s16)) {
+      if (song.accent && stage >= 2 && (chorus ? cbar : bar) % song.accent.every === (song.accent.at != null ? song.accent.at : song.accent.every - 1) && song.accent.steps.includes(s16)) {
         this.drum('kickHard', t, 1, p.outDrum); this.drum('clap', t, 1.1, p.outDrum);
         if (stage >= 3) this.pad(t, chordMidis(song, deg, 0, 3), p.stepDur * 1.5, 'stab', p.outWide, 0.9);
       }
