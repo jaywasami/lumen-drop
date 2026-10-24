@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.08-19';
+  const VERSION = '2026.10.24-1';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -60,7 +60,7 @@
   }
   const pauseBtn = $('btn-pause');
   const zoneBtn = $('btn-zone');
-  const overlays = ['menu', 'pause', 'gameover', 'help', 'settings', 'versus', 'room', 'vsresult', 'vsquit'].reduce((o, k) => (o[k] = $(k), o), {});
+  const overlays = ['menu', 'pause', 'gameover', 'help', 'settings', 'versus', 'room', 'vsresult', 'vsquit', 'intro'].reduce((o, k) => (o[k] = $(k), o), {});
   function showOverlay(name) {
     for (const k in overlays) overlays[k].classList.toggle('hidden', k !== name);
   }
@@ -2097,7 +2097,33 @@
     layout(); applyCustomPad(); syncSizeSliders();
   });
   $('pe-done').addEventListener('click', () => { Snd.play('ui'); closePadEditor(); });
-  $('btn-start').addEventListener('click', ui(() => startGame()));
+  // ===== 第一次玩：快速上手（只自動出現一次，操作說明裡可以再打開）=====
+  function introSeen() { try { return localStorage.getItem('lumen.intro.v1') === '1'; } catch (_) { return true; } }
+  function buildIntro() {
+    const row = (keys, text) => `<div class="intro-row">${keys.map((k) => `<span class="kc">${k}</span>`).join('')}<span>${text}</span></div>`;
+    let html;
+    if (coarse && settings.controls === 'gesture') {
+      html = row(['↔'], '左右拖曳：移動方塊') + row(['↓'], '往下拖：加速落下；快速下滑：直接落到底')
+        + row(['點'], '點右半邊順時針、左半邊逆時針旋轉') + row(['↑'], '快速上滑：暫存（HOLD）');
+    } else if (coarse) {
+      html = row(['◀', '▶'], '左右移動') + row(['▼'], '加速落下（軟降）')
+        + row(['⤓'], '直接落到底（放開才落下，手指滑出按鈕可取消）')
+        + row(['↺', '↻'], '旋轉') + row(['HOLD'], '暫存目前的方塊，之後再拿出來用');
+    } else {
+      html = row(['←', '→'], '移動　' + '<span class="kc">↓</span> 軟降') + row(['空白鍵'], '直接落到底')
+        + row(['↑', 'Z'], '順時針 / 逆時針旋轉') + row(['C'], '暫存（HOLD）　<span class="kc">Esc</span> 暫停');
+    }
+    html += row(['ZONE'], '消行集滿左邊量表 1/4 以上就能點它發動：時間暫停、一口氣累積大量消行');
+    if (coarse) html += '<div class="intro-tip"><b>按鍵太小、位置不順手？</b><br>到「設定 → 自訂按鍵位置」，每顆按鍵都可以<b>拖曳到任何位置、個別調整大小</b>。也可以在設定裡把「觸控操作」改成手勢。</div>';
+    html += '<div class="intro-tip"><b>小提醒</b>：每關消 30 行過關，音樂會越來越澎湃，建議戴耳機。這個說明之後可以在「操作說明」再打開。</div>';
+    $('intro-body').innerHTML = html;
+    $('intro-pad').classList.toggle('hidden', !coarse);
+  }
+  function openIntro() { buildIntro(); try { localStorage.setItem('lumen.intro.v1', '1'); } catch (_) { /* ignore */ } showOverlay('intro'); }
+  $('btn-start').addEventListener('click', ui(() => { if (!introSeen()) openIntro(); else startGame(); }));
+  $('intro-go').addEventListener('click', ui(() => startGame()));
+  $('intro-pad').addEventListener('click', ui(() => { settingsReturn = 'menu'; buildSettings(); openPadEditor(); }));
+  $('btn-help-intro').addEventListener('click', ui(openIntro));
   $('btn-versus').addEventListener('click', ui(openVersus));
   $('vs-name').addEventListener('input', (e) => { settings.name = e.target.value.trim().slice(0, 12); e.target.classList.remove('need'); saveSettings(); });
   for (const b of $('vs-rounds').children) {

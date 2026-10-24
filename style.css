@@ -183,3 +183,13 @@ body.post-light #gl { display: block; mix-blend-mode: screen; }
 
 /* 設定：指定關卡下拉選單 */
 .stage-sel { font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25); background: rgba(20,24,48,0.9); color: #fff; max-width: 60%; }
+
+/* 快速上手 */
+.intro-body { text-align: left; font-size: 15px; line-height: 1.6; color: #dfe4ff; display: flex; flex-direction: column; gap: 10px; }
+.intro-pads { display: flex; justify-content: space-between; gap: 10px; }
+.intro-pad { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.intro-row { display: flex; align-items: center; gap: 10px; }
+.kc { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 36px; padding: 0 8px; border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); font-weight: 700; font-size: 16px; color: #fff; flex: none; }
+.intro-tip { border: 1px solid var(--accent); background: rgba(110, 231, 255, 0.1); border-radius: 12px; padding: 10px 12px; }
+.intro-tip b { color: var(--accent); }
