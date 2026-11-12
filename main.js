@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.10.24-1';
+  const VERSION = '2026.11.12-1';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -139,7 +139,7 @@
     { name: '熔岩', accent: [255, 110, 50], style: 'gem', sub: '大地的心跳' },
     { name: '飛龍', accent: [255, 200, 80], style: 'gold', sub: '龍騰九霄' },
     { name: '夕陽雲海', accent: [255, 179, 107], style: 'gem', sub: '雲海盡頭是黃昏' },
-    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！', hiFx: true, songs: ['主場應援', '龍光乍現'] },
+    { name: '主場應援', accent: [255, 96, 90], style: 'gem', sub: '全場一起喊出來！', hiFx: true, favor: true, songs: ['主場應援', '龍光乍現'] },
   ];
   let themeIdx = 0;
   // 有多首歌的關卡：每次進這關就從上次的下一首開始（記在本機，重開遊戲也接著輪），播完一首換下一首
@@ -1036,6 +1036,12 @@
     const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const order = THEMES.map((_, i) => i);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    // 加權關卡（球場）：約一半的局第一關就是它，其餘的局排在第 2 或第 3 關
+    const fav = THEMES.findIndex((th) => th.favor);
+    if (fav >= 0) {
+      const pos = rnd() < 0.5 ? 0 : 1 + Math.floor(rnd() * 2);
+      order.splice(order.indexOf(fav), 1); order.splice(pos, 0, fav);
+    }
     return order;
   }
   function startRound(r, seed) {
@@ -1298,7 +1304,7 @@
   let soloOrder = null, lastFirstTheme = -1;
   function newSoloOrder() {
     soloOrder = shuffledThemes((Math.random() * 4294967296) >>> 0);
-    if (soloOrder[0] === lastFirstTheme) [soloOrder[0], soloOrder[1]] = [soloOrder[1], soloOrder[0]];
+    if (soloOrder[0] === lastFirstTheme && !THEMES[soloOrder[0]].favor) [soloOrder[0], soloOrder[1]] = [soloOrder[1], soloOrder[0]];
     lastFirstTheme = soloOrder[0];
   }
   function themeFor(level) {
