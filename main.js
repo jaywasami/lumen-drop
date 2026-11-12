@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.11.12-3';
+  const VERSION = '2026.11.12-4';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -1036,11 +1036,12 @@
     const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const order = THEMES.map((_, i) => i);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
-    // 加權關卡（球場）：每一局都會出現，隨機排在第 5～10 關
+    // 加權關卡（球場）：每一局出現兩次，第 3～6 關隨機一次、第 9～12 關隨機一次
     const fav = THEMES.findIndex((th) => th.favor);
     if (fav >= 0) {
-      const pos = 4 + Math.floor(rnd() * 6);
-      order.splice(order.indexOf(fav), 1); order.splice(pos, 0, fav);
+      order.splice(order.indexOf(fav), 1);
+      order.splice(2 + Math.floor(rnd() * 4), 0, fav);
+      order.splice(8 + Math.floor(rnd() * 4), 0, fav);
     }
     return order;
   }
@@ -1310,9 +1311,8 @@
   function themeFor(level) {
     // 單人模式可在設定裡指定關卡：整局都在那個場景
     if (!vs && settings.stage >= 0 && settings.stage < THEMES.length) return settings.stage | 0;
-    const i = (level - 1) % THEMES.length;
     const order = vs ? vs.themeOrder : soloOrder;
-    return order ? order[i] : i;
+    return order ? order[(level - 1) % order.length] : (level - 1) % THEMES.length;
   }
 
   // ================= 過關過場 =================
