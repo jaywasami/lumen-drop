@@ -8,7 +8,7 @@
   const { W, H, HIDDEN, VIS, SHAPES } = E;
 
   // 版本號：日期 + 當天第幾版（每次發佈更新）
-  const VERSION = '2026.11.12-2';
+  const VERSION = '2026.11.12-3';
 
   // ================= 設定 =================
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -1036,10 +1036,10 @@
     const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const order = THEMES.map((_, i) => i);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
-    // 加權關卡（球場）：每一局都排在第 2 關，玩一關就一定會遇到
+    // 加權關卡（球場）：每一局都會出現，隨機排在第 5～10 關
     const fav = THEMES.findIndex((th) => th.favor);
     if (fav >= 0) {
-      const pos = 1;
+      const pos = 4 + Math.floor(rnd() * 6);
       order.splice(order.indexOf(fav), 1); order.splice(pos, 0, fav);
     }
     return order;
@@ -1304,7 +1304,7 @@
   let soloOrder = null, lastFirstTheme = -1;
   function newSoloOrder() {
     soloOrder = shuffledThemes((Math.random() * 4294967296) >>> 0);
-    if (soloOrder[0] === lastFirstTheme) [soloOrder[0], soloOrder[2]] = [soloOrder[2], soloOrder[0]]; // 和第 3 關交換，第 2 關固定是球場
+    if (soloOrder[0] === lastFirstTheme) [soloOrder[0], soloOrder[1]] = [soloOrder[1], soloOrder[0]];
     lastFirstTheme = soloOrder[0];
   }
   function themeFor(level) {
